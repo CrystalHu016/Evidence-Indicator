@@ -1,0 +1,9 @@
+# OpenAI API Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Test Data Configuration (set to 'true' for faster development)
+USE_TEST_DATA=false
+
+# Data and Storage Paths
+CHROMA_PATH=chroma
+DATA_PATH=./data/single_20240229.json 
