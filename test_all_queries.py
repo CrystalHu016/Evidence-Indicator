@@ -41,7 +41,7 @@ def test_all_query_formats():
         
         try:
             # 使用超高速RAG系统
-            response, sources, evidence, start_pos, end_pos = query_data(query, use_advanced_rag=True)
+            response, sources, evidence, start_pos, end_pos = query_data(query)
             elapsed = time.time() - start_time
             
             # 完整日语格式输出
