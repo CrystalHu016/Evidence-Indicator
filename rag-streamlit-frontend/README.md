@@ -11,6 +11,9 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
 - **Beautiful UI**: Modern, responsive design with Japanese language support
 - **Quick Query Buttons**: Pre-defined queries for quick testing
 - **Performance Charts**: Visualize system performance over time
+- **Debug Mode**: Advanced debugging and error handling
+- **API Health Monitoring**: Real-time backend API status checking
+- **Fallback Simulation**: Works even when backend is unavailable
 
 ## 📋 Prerequisites
 
@@ -20,7 +23,7 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
 
 ## 🛠️ Installation
 
-1. **Clone or navigate to the frontend directory:**
+1. **Navigate to the frontend directory:**
    ```bash
    cd rag-streamlit-frontend
    ```
@@ -38,11 +41,11 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
 
 ## 🚀 Usage
 
-### Basic Usage
+### Quick Start
 
 1. **Start the Streamlit application:**
    ```bash
-   streamlit run app.py
+   streamlit run app_enhanced.py
    ```
 
 2. **Open your browser and navigate to:**
@@ -55,12 +58,22 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
    - Click "🔍 検索実行" to submit
    - View results in the beautiful interface
 
-### Advanced Usage
+### Alternative Startup Methods
 
-- **Quick Queries**: Use the pre-defined query buttons for quick testing
-- **Query History**: Access previous queries from the sidebar
-- **Performance Monitoring**: View real-time performance metrics and charts
-- **API Configuration**: Configure backend API settings in the sidebar
+**Using the startup script:**
+```bash
+./run_streamlit.sh
+```
+
+**Using the basic app:**
+```bash
+streamlit run app.py
+```
+
+**Using the test UI:**
+```bash
+streamlit run test_ui.py
+```
 
 ## 📊 Features Overview
 
@@ -73,7 +86,9 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
   - 【根拠情報】: Extracted evidence with character positions
 
 ### Sidebar Features
+- **Debug Mode**: Toggle for advanced debugging information
 - **API Configuration**: Set backend API URL
+- **API Health Monitoring**: Real-time status checking
 - **Query History**: Access and reuse previous queries
 - **Quick Actions**: Clear history and reset metrics
 - **Statistics**: View query counts and performance metrics
@@ -82,6 +97,13 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
 - **Real-time Metrics**: Processing time tracking
 - **Performance Charts**: Visual performance trends
 - **Statistics Panel**: Query counts and average processing times
+- **API Status Indicators**: Visual feedback on backend connectivity
+
+### Debug Features
+- **Debug Mode**: Shows detailed API responses and error information
+- **Error Handling**: Graceful fallback to simulation mode
+- **API Health Checks**: Automatic backend availability monitoring
+- **Detailed Logging**: Comprehensive error tracking and reporting
 
 ## ⚙️ Configuration
 
@@ -114,17 +136,28 @@ The `config.py` file contains additional settings:
 
 ```
 rag-streamlit-frontend/
-├── app.py              # Main Streamlit application
+├── app.py              # Basic Streamlit application
+├── app_enhanced.py     # Enhanced version with debugging
+├── test_ui.py          # UI testing script
 ├── config.py           # Configuration settings
 ├── requirements.txt    # Python dependencies
+├── run_streamlit.sh    # Startup script
 ├── README.md          # This file
 ├── streamlit-env/     # Virtual environment
 └── .env              # Environment variables (create this)
 ```
 
+### File Descriptions
+
+- **`app.py`**: Basic Streamlit application with core functionality
+- **`app_enhanced.py`**: Enhanced version with debug mode, API health monitoring, and error handling
+- **`test_ui.py`**: Simple test script to verify UI components work correctly
+- **`config.py`**: Centralized configuration management
+- **`run_streamlit.sh`**: Automated startup script with environment checks
+
 ### Adding New Features
 
-1. **New UI Components**: Add to `app.py`
+1. **New UI Components**: Add to `app_enhanced.py`
 2. **Configuration**: Update `config.py`
 3. **Dependencies**: Add to `requirements.txt`
 
@@ -135,26 +168,16 @@ rag-streamlit-frontend/
 To connect to the actual RAG backend:
 
 1. **Update API URL**: Set `API_BASE_URL` in `.env`
-2. **Modify `call_rag_api()`**: Replace simulation with actual API calls
-3. **Test Connection**: Use the health check endpoint
+2. **Start Backend**: Ensure the RAG backend is running
+3. **Test Connection**: Use the API health check in the sidebar
 
 ### Example API Integration
 
-```python
-def call_rag_api(query: str) -> dict:
-    """Call the actual RAG API"""
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/query",
-            json={"query": query},
-            timeout=API_TIMEOUT
-        )
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        st.error(f"API呼び出しエラー: {str(e)}")
-        return None
-```
+The enhanced app automatically handles:
+- API health checking
+- Connection timeouts
+- Error fallbacks
+- Simulation mode when backend is unavailable
 
 ## 📈 Performance
 
@@ -162,6 +185,7 @@ def call_rag_api(query: str) -> dict:
 - **Responsive UI**: Smooth interactions and real-time updates
 - **Memory Efficient**: Session state management for optimal performance
 - **Scalable**: Designed to handle multiple concurrent users
+- **Fallback Mode**: Works even without backend connectivity
 
 ## 🎨 UI/UX Features
 
@@ -170,32 +194,60 @@ def call_rag_api(query: str) -> dict:
 - **Dark/Light Mode**: Automatic theme detection
 - **Accessibility**: Keyboard navigation and screen reader support
 - **Error Handling**: Graceful error messages and recovery
+- **Visual Feedback**: Loading spinners, success/error indicators
+- **Interactive Charts**: Real-time performance visualization
 
-## 🔍 Troubleshooting
+## 🔍 Debugging
+
+### Debug Mode
+
+Enable debug mode in the sidebar to see:
+- Detailed API responses
+- Error stack traces
+- Performance metrics
+- Session state information
 
 ### Common Issues
 
 1. **Port Already in Use**:
    ```bash
-   streamlit run app.py --server.port 8502
+   streamlit run app_enhanced.py --server.port 8502
    ```
 
 2. **API Connection Issues**:
    - Check API_BASE_URL in `.env`
    - Verify backend is running
-   - Check network connectivity
+   - Use API health check in sidebar
+   - App will automatically fall back to simulation mode
 
 3. **Dependencies Issues**:
    ```bash
    pip install --upgrade -r requirements.txt
    ```
 
-### Debug Mode
+### Debug Commands
 
 Run with debug information:
-
 ```bash
-streamlit run app.py --logger.level debug
+streamlit run app_enhanced.py --logger.level debug
+```
+
+## 🧪 Testing
+
+### UI Testing
+
+Run the test UI to verify components:
+```bash
+streamlit run test_ui.py
+```
+
+### API Testing
+
+Test API connectivity:
+```python
+import requests
+response = requests.get("http://localhost:8000/health")
+print(response.json())
 ```
 
 ## 📝 License
@@ -212,4 +264,4 @@ This project is part of the Evidence Indicator RAG System.
 
 ---
 
-**🔍 Evidence Indicator RAG System | Streamlit Frontend | Powered by Streamlit**
+**🔍 Evidence Indicator RAG System | Streamlit Frontend | Powered by Streamlit** 

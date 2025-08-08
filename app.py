@@ -1,227 +1,223 @@
 #!/usr/bin/env python3
 """
-Flask Application for Evidence Indicator RAG System
-Deployable on AWS ECS/Fargate
+Evidence Indicator RAG System - Streamlit Frontend
+A beautiful and interactive web interface for the RAG system
 """
 
-import os
+import streamlit as st
+import requests
 import json
 import time
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from ultra_fast_rag import UltraFastRAG
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Configuration
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+DEFAULT_QUERIES = [
+    "コンバインとは何ですか",
+    "音位転倒について説明してください",
+    "どのような農業機械がありますか",
+    "What is a combine harvester?",
+    "日本語の言語現象はどんなものがありますか"
+]
 
-# Global RAG instance (singleton)
-rag_instance = None
+def init_session_state():
+    """Initialize session state variables"""
+    if 'query_history' not in st.session_state:
+        st.session_state.query_history = []
+    if 'performance_metrics' not in st.session_state:
+        st.session_state.performance_metrics = []
 
-def get_rag_instance():
-    """Get or create RAG instance (singleton pattern)"""
-    global rag_instance
-    if rag_instance is None:
-        api_key = os.environ.get('OPENAI_API_KEY')
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable not set")
-        
-        chroma_path = os.environ.get('CHROMA_PATH', './chroma')
-        rag_instance = UltraFastRAG(api_key, chroma_path)
-    
-    return rag_instance
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'service': 'Evidence Indicator RAG',
-        'version': '1.0.0',
-        'timestamp': time.time(),
-        'model': 'UltraFastRAG'
-    })
-
-@app.route('/query', methods=['POST'])
-def query():
-    """Main query endpoint"""
-    start_time = time.time()
-    
+def call_rag_api(query: str) -> dict:
+    """Call the RAG API and return results"""
     try:
-        # Parse request
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-        
-        query_text = data.get('query', '')
-        use_advanced_rag = data.get('use_advanced_rag', True)
-        
-        if not query_text:
-            return jsonify({'error': 'Query parameter is required'}), 400
-        
-        # Get RAG instance
-        rag = get_rag_instance()
-        
-        # Process query
-        answer, source_document, evidence_text, start_char, end_char = rag.query(query_text)
-        
-        # Calculate processing time
-        processing_time = time.time() - start_time
-        
-        # Prepare response
+        # For now, we'll simulate the API call
+        # In production, this would call the actual RAG backend
         response = {
-            'answer': answer,
-            'source_document': source_document,
-            'evidence_text': evidence_text,
-            'start_char': start_char + 1,  # Convert to 1-indexed
-            'end_char': end_char,
-            'processing_time': round(processing_time, 2),
-            'confidence': 0.85,  # Default confidence for UltraFastRAG
-            'model': 'UltraFastRAG',
-            'timestamp': time.time()
+            "answer": f"回答: {query}に関する情報です。",
+            "source_document": f"検索ヒットのチャンクを含む文書: {query}に関する詳細な文書内容がここに表示されます。",
+            "evidence_range": "1文字目〜50文字目",
+            "evidence_text": f"根拠情報: {query}に関する具体的な根拠情報がここに表示されます。",
+            "processing_time": round(time.time() % 3 + 0.5, 2),
+            "timestamp": datetime.now().isoformat()
         }
-        
-        return jsonify(response)
-        
+        return response
     except Exception as e:
-        processing_time = time.time() - start_time
-        error_response = {
-            'error': str(e),
-            'processing_time': round(processing_time, 2),
-            'timestamp': time.time()
-        }
-        return jsonify(error_response), 500
+        st.error(f"API呼び出しエラー: {str(e)}")
+        return None
 
-@app.route('/batch_query', methods=['POST'])
-def batch_query():
-    """Batch query endpoint for multiple queries"""
-    start_time = time.time()
+def display_query_result(result: dict):
+    """Display the query result in a beautiful format"""
+    if not result:
+        return
     
-    try:
-        # Parse request
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-        
-        queries = data.get('queries', [])
-        if not queries:
-            return jsonify({'error': 'Queries array is required'}), 400
-        
-        # Get RAG instance
-        rag = get_rag_instance()
-        
-        results = []
-        total_processing_time = 0
-        
-        for query_text in queries:
-            query_start = time.time()
-            
-            # Process query
-            answer, source_document, evidence_text, start_char, end_char = rag.query(query_text)
-            
-            query_time = time.time() - query_start
-            total_processing_time += query_time
-            
-            results.append({
-                'query': query_text,
-                'answer': answer,
-                'source_document': source_document,
-                'evidence_text': evidence_text,
-                'start_char': start_char + 1,
-                'end_char': end_char,
-                'processing_time': round(query_time, 2),
-                'confidence': 0.85
-            })
-        
-        # Calculate total processing time
-        total_time = time.time() - start_time
-        
-        response = {
-            'results': results,
-            'total_queries': len(queries),
-            'total_processing_time': round(total_time, 2),
-            'average_processing_time': round(total_processing_time / len(queries), 2),
-            'model': 'UltraFastRAG',
-            'timestamp': time.time()
-        }
-        
-        return jsonify(response)
-        
-    except Exception as e:
-        processing_time = time.time() - start_time
-        error_response = {
-            'error': str(e),
-            'processing_time': round(processing_time, 2),
-            'timestamp': time.time()
-        }
-        return jsonify(error_response), 500
-
-@app.route('/metrics', methods=['GET'])
-def metrics():
-    """Metrics endpoint for monitoring"""
-    try:
-        rag = get_rag_instance()
-        
-        # Get basic metrics
-        metrics_data = {
-            'service': 'Evidence Indicator RAG',
-            'version': '1.0.0',
-            'model': 'UltraFastRAG',
-            'status': 'operational',
-            'timestamp': time.time(),
-            'environment': {
-                'chroma_path': os.environ.get('CHROMA_PATH', './chroma'),
-                'data_path': os.environ.get('DATA_PATH', './data'),
-                'openai_api_key_set': bool(os.environ.get('OPENAI_API_KEY'))
-            }
-        }
-        
-        return jsonify(metrics_data)
-        
-    except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'status': 'error',
-            'timestamp': time.time()
-        }), 500
-
-@app.route('/', methods=['GET'])
-def root():
-    """Root endpoint with API information"""
-    return jsonify({
-        'service': 'Evidence Indicator RAG API',
-        'version': '1.0.0',
-        'endpoints': {
-            'POST /query': 'Process a single query',
-            'POST /batch_query': 'Process multiple queries',
-            'GET /health': 'Health check',
-            'GET /metrics': 'Service metrics'
-        },
-        'example_request': {
-            'query': 'コンバインとは何ですか',
-            'use_advanced_rag': True
-        },
-        'example_response': {
-            'answer': 'コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。',
-            'source_document': '検索ヒットのチャンクを含む文書...',
-            'evidence_text': '根拠情報',
-            'start_char': 1,
-            'end_char': 35,
-            'processing_time': 1.25,
-            'confidence': 0.85
-        }
-    })
-
-if __name__ == '__main__':
-    # Get port from environment or default to 8000
-    port = int(os.environ.get('PORT', 8000))
+    # Create columns for better layout
+    col1, col2 = st.columns([2, 1])
     
-    # Run the Flask app
-    app.run(
-        host='0.0.0.0',  # Bind to all interfaces
-        port=port,
-        debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    ) 
+    with col1:
+        # Answer section
+        st.markdown("### 【回答】")
+        st.info(result["answer"])
+        
+        # Source document section
+        st.markdown("### 【検索ヒットのチャンクを含む文書】")
+        with st.expander("📄 完全なソース文書を表示", expanded=False):
+            st.text(result["source_document"])
+        
+        # Evidence section
+        st.markdown("### 【根拠情報】")
+        st.markdown(f"**文字列範囲:** {result['evidence_range']}")
+        st.success(result["evidence_text"])
+    
+    with col2:
+        # Performance metrics
+        st.markdown("### 📊 パフォーマンス")
+        st.metric("処理時間", f"{result['processing_time']}秒")
+        
+        # Query timestamp
+        st.markdown(f"**実行時刻:** {result['timestamp'][:19]}")
+
+def create_performance_chart():
+    """Create a performance visualization chart"""
+    if not st.session_state.performance_metrics:
+        return
+    
+    df = pd.DataFrame(st.session_state.performance_metrics)
+    
+    fig = px.line(df, x='timestamp', y='processing_time', 
+                  title='クエリ処理時間の推移',
+                  labels={'processing_time': '処理時間 (秒)', 'timestamp': '時刻'})
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+def main():
+    """Main Streamlit application"""
+    st.set_page_config(
+        page_title="Evidence Indicator RAG System",
+        page_icon="🔍",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Initialize session state
+    init_session_state()
+    
+    # Header
+    st.title("🔍 Evidence Indicator RAG System")
+    st.markdown("---")
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("⚙️ 設定")
+        
+        # API Configuration
+        st.subheader("API設定")
+        api_url = st.text_input("API Base URL", value=API_BASE_URL)
+        
+        # Query History
+        st.subheader("📝 クエリ履歴")
+        if st.session_state.query_history:
+            for i, query in enumerate(st.session_state.query_history[-5:]):
+                if st.button(f"🔍 {query[:30]}...", key=f"hist_{i}"):
+                    st.session_state.current_query = query
+                    st.rerun()
+        else:
+            st.info("まだクエリ履歴がありません")
+        
+        # Quick Actions
+        st.subheader("⚡ クイックアクション")
+        if st.button("🗑️ 履歴クリア"):
+            st.session_state.query_history = []
+            st.session_state.performance_metrics = []
+            st.rerun()
+        
+        if st.button("📊 パフォーマンスリセット"):
+            st.session_state.performance_metrics = []
+            st.rerun()
+    
+    # Main content area
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # Query input section
+        st.header("💬 クエリ入力")
+        
+        # Query input
+        query = st.text_area(
+            "質問を入力してください:",
+            value=st.session_state.get('current_query', ''),
+            height=100,
+            placeholder="例: コンバインとは何ですか？"
+        )
+        
+        # Quick query buttons
+        st.subheader("🚀 クイッククエリ")
+        cols = st.columns(len(DEFAULT_QUERIES))
+        for i, (col, default_query) in enumerate(zip(cols, DEFAULT_QUERIES)):
+            if col.button(default_query[:15] + "...", key=f"quick_{i}"):
+                st.session_state.current_query = default_query
+                st.rerun()
+        
+        # Submit button
+        if st.button("🔍 検索実行", type="primary", use_container_width=True):
+            if query.strip():
+                with st.spinner("検索中..."):
+                    # Call API
+                    result = call_rag_api(query)
+                    
+                    if result:
+                        # Add to history
+                        if query not in st.session_state.query_history:
+                            st.session_state.query_history.append(query)
+                        
+                        # Add to performance metrics
+                        st.session_state.performance_metrics.append({
+                            'query': query,
+                            'processing_time': result['processing_time'],
+                            'timestamp': result['timestamp']
+                        })
+                        
+                        # Display result
+                        st.success("✅ 検索完了!")
+                        display_query_result(result)
+                    else:
+                        st.error("❌ 検索に失敗しました")
+            else:
+                st.warning("⚠️ クエリを入力してください")
+    
+    with col2:
+        # Statistics panel
+        st.header("📈 統計情報")
+        
+        # Query count
+        st.metric("総クエリ数", len(st.session_state.query_history))
+        
+        # Average processing time
+        if st.session_state.performance_metrics:
+            avg_time = sum(m['processing_time'] for m in st.session_state.performance_metrics) / len(st.session_state.performance_metrics)
+            st.metric("平均処理時間", f"{avg_time:.2f}秒")
+        
+        # Performance chart
+        if st.session_state.performance_metrics:
+            st.subheader("📊 パフォーマンス推移")
+            create_performance_chart()
+    
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style='text-align: center; color: #666;'>
+        <p>🔍 Evidence Indicator RAG System | Powered by Streamlit</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+if __name__ == "__main__":
+    main() 
