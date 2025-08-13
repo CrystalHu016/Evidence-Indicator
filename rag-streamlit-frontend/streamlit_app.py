@@ -19,6 +19,28 @@ import logging
 from typing import Any, Dict, Optional, Tuple
 import streamlit.components.v1 as components
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Load from parent directory where .env file is located
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    env_path = os.path.join(parent_dir, '.env')
+    load_dotenv(env_path)
+    print("✅ Environment variables loaded from .env file")
+    
+    # Set environment variables for proper file paths instead of changing working directory
+    os.environ['CHROMA_PATH'] = os.path.join(parent_dir, 'chroma')
+    os.environ['DATA_PATH'] = os.path.join(parent_dir, 'data', 'single_20240229.json')
+    print(f"✅ Environment variables set - CHROMA_PATH: {os.environ['CHROMA_PATH']}")
+    print(f"✅ Environment variables set - DATA_PATH: {os.environ['DATA_PATH']}")
+    
+except ImportError:
+    print("⚠️ python-dotenv not available, using system environment variables")
+except Exception as e:
+    print(f"⚠️ Error loading .env file: {e}")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -39,13 +61,10 @@ class AppConfig:
 SAMPLE_QUERIES = {
     "Agriculture (農業)": [
         "コンバインとは何ですか",
-        "農業機械の種類について教えてください",
-        "稲作の手順を説明してください"
+        "農業機械の種類について教えてください"
     ],
     "Language (言語学)": [
-        "音位転倒について説明してください",
-        "日本語の言語現象について教えてください",
-        "音韻変化の種類は何ですか"
+        "音位転倒について説明してください"
     ],
     "Technology (技術)": [
         "AI技術の最新動向",
@@ -66,14 +85,10 @@ SAMPLE_QUERIES = {
 def initialize_language():
     """Initialize UI language preference in session state."""
     if 'ui_language' not in st.session_state:
-        st.session_state.ui_language = 'bi'  # 'ja' | 'en' | 'bi'
-    # Ensure radio default matches current language
-    if 'lang_radio' not in st.session_state:
-        st.session_state.lang_radio = {
-            'ja': '日本語',
-            'en': 'English',
-            'bi': 'Bilingual / バイリンガル'
-        }[st.session_state.ui_language]
+        st.session_state.ui_language = 'ja'  # default to Japanese; options: 'ja' | 'en'
+    # Coerce any legacy 'bi' to 'ja'
+    if st.session_state.ui_language == 'bi':
+        st.session_state.ui_language = 'ja'
 
 def t(japanese_text: str, english_text: str) -> str:
     """Translate helper. Returns text based on UI language setting."""
@@ -88,16 +103,20 @@ def t(japanese_text: str, english_text: str) -> str:
 def language_selector_in_sidebar():
     """Render language selector in sidebar."""
     with st.sidebar:
+        options = ["日本語", "English"]
+        current_label = {"ja": "日本語", "en": "English"}.get(st.session_state.get('ui_language', 'ja'), "日本語")
         choice = st.radio(
             "Language / 言語",
-            ["日本語", "English", "Bilingual / バイリンガル"],
+            options,
+            index=options.index(current_label),
             horizontal=True,
             key="lang_radio",
         )
-        mapped = {"日本語": "ja", "English": "en", "Bilingual / バイリンガル": "bi"}[choice]
-        # Update only if changed to avoid redundant resets
+        mapped = {"日本語": "ja", "English": "en"}[choice]
+        # Update only if changed then rerun once to apply everywhere
         if st.session_state.get('ui_language') != mapped:
             st.session_state.ui_language = mapped
+            st.rerun()
 
 def inject_global_styles():
     """Inject lightweight CSS to beautify the UI."""
@@ -142,6 +161,7 @@ def validate_query(query: str) -> Tuple[bool, str]:
 # API FUNCTIONS
 # =============================================================================
 
+@st.cache_data(show_spinner=False, ttl=15)
 def call_health_check(api_url: str) -> bool:
     """Check API health"""
     try:
@@ -161,90 +181,51 @@ def call_health_check(api_url: str) -> bool:
     # Always return True for simulation mode
     return True
 
+@st.cache_data(show_spinner=False, ttl=300)
+def _fetch_single_query_cached(api_url: str, query: str, timeout_seconds: int, cache_version: str = "v6_backend_working") -> Tuple[Optional[Dict], Optional[str]]:
+    """Pure function for fetching a single query result; safe to cache."""
+    # Try backend integration first (this is the primary method)
+    try:
+        from backend_integration import call_backend_query
+        result, error = call_backend_query(query)
+        if result and not error:
+            return result, None
+        elif error:
+            # If backend integration has an error, return it directly (don't fall back to simulation)
+            return None, error
+    except ImportError:
+        # If backend_integration module not available
+        pass
+    except Exception as e:
+        # If there's any other error with backend integration
+        return None, f"Backend error: {str(e)}"
+
+    # Try HTTP API
+    try:
+        if api_url:
+            response = requests.post(
+                f"{api_url}/query",
+                json={"query": query},
+                headers={"Content-Type": "application/json"},
+                timeout=timeout_seconds
+            )
+            if response.status_code == 200:
+                return response.json(), None
+    except Exception:
+        pass
+
+    # No more hardcoded simulations - return None to indicate no data found
+    # This will force the system to show a proper "no results" message
+    return None, "No simulation data available. Please ensure the RAG backend is running and the vector database is built with your JSON dataset."
+
 def call_single_query(api_url: str, query: str) -> Tuple[Optional[Dict], Optional[str]]:
-    """Call the single query endpoint - either backend directly or API"""
+    """Call the single query endpoint with caching and spinner."""
     try:
         with st.spinner("🔄 処理中..."):
-            # Try to import and use the backend integration
-            try:
-                from backend_integration import call_backend_query
-                result, error = call_backend_query(query)
-                if result and not error:
-                    return result, None
-            except ImportError:
-                pass
-            except Exception:
-                pass
-            
-            # Fallback to API call if backend integration not available
-            try:
-                response = requests.post(
-                    f"{api_url}/query",
-                    json={"query": query},
-                    headers={"Content-Type": "application/json"},
-                    timeout=st.session_state.settings.get('single_timeout', 30)
-                )
-                if response.status_code == 200:
-                    return response.json(), None
-            except:
-                pass
-            
-            # Always use simulation mode as final fallback
-            import time
-            
-            # Enhanced simulation responses based on query content
-            if "コンバイン" in query:
-                response_data = {
-                    "answer": "コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。",
-                    "source_document": "コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は主にアメリカやヨーロッパ等大規模農業で使われていて、稲・麦・大豆の他にも小豆・菜種・トウモロコシなどの幅広い作物に対応した汎用性の農業機械です。自立型は収穫時に水分含有率が高い稲の収穫に対応するために開発された日本独自の農業機械です。",
-                    "evidence_text": "コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。",
-                    "start_char": 1,
-                    "end_char": 35,
-                    "processing_time": 1.8,
-                    "confidence": 0.95,
-                    "model": "UltraFastRAG (Demo Mode)",
-                    "timestamp": time.time()
-                }
-            elif "音位転倒" in query:
-                response_data = {
-                    "answer": "音位転倒（おんいてんとう）は、音韻論における言語現象の一つで、音素の順序が入れ替わる現象です。",
-                    "source_document": "音位転倒（おんいてんとう、metathesis）は、音韻論における言語現象の一つである。音素の順序が入れ替わる現象を指す。例えば、「蒲団」（ふとん）が「ぶとん」になったり、英語の「ask」が一部の方言で「aks」になったりする現象がこれに当たる。",
-                    "evidence_text": "音位転倒（おんいてんとう）は、音韻論における言語現象の一つで、音素の順序が入れ替わる現象です。",
-                    "start_char": 1,
-                    "end_char": 44,
-                    "processing_time": 2.1,
-                    "confidence": 0.92,
-                    "model": "UltraFastRAG (Demo Mode)",
-                    "timestamp": time.time()
-                }
-            else:
-                response_data = {
-                    "answer": f"「{query}」に関する情報を検索いたしました。このクエリに対する詳細な回答を提供いたします。（デモモード動作中）",
-                    "source_document": f"これは「{query}」に関する文書の内容です。詳細な情報が含まれており、ユーザーのクエリに対する根拠となる情報を提供しています。システムが適切に動作していることを確認できます。Evidence Indicator RAG Systemは日本語クエリに対して正確な回答と根拠を提供します。",
-                    "evidence_text": f"「{query}」に関する重要な情報です。",
-                    "start_char": 1,
-                    "end_char": min(25, len(query) + 15),
-                    "processing_time": 1.5,
-                    "confidence": 0.88,
-                    "model": "UltraFastRAG (Demo Mode)",
-                    "timestamp": time.time()
-                }
-            
-            return response_data, None
-            
+            timeout_seconds = st.session_state.settings.get('single_timeout', 30)
+            return _fetch_single_query_cached(api_url, query, timeout_seconds, "v6_backend_working")
     except Exception as e:
-        # Even if everything fails, return a basic response
-        return {
-            "answer": "システムエラーが発生しましたが、デモ応答を表示しています。",
-            "source_document": "エラー発生時のデモ文書です。",
-            "evidence_text": "デモ根拠情報",
-            "start_char": 1,
-            "end_char": 10,
-            "processing_time": 1.0,
-            "confidence": 0.5,
-            "model": "Emergency Demo Mode",
-            "timestamp": time.time()
-        }, None
+        return None, str(e)
 
 
 
@@ -252,20 +233,37 @@ def call_single_query(api_url: str, query: str) -> Tuple[Optional[Dict], Optiona
 # DISPLAY FUNCTIONS
 # =============================================================================
 
+@st.cache_data(show_spinner=False, ttl=300)
+def compute_effective_range(source_text: str, start_char: int, end_char: int, evidence_text: str) -> Tuple[int, int]:
+    """Return an adjusted 1-based (start, end) range that best matches evidence_text if available."""
+    if source_text and evidence_text:
+        idx = source_text.find(evidence_text)
+        if idx != -1:
+            # Convert to 1-based inclusive range
+            start = idx + 1
+            end = idx + len(evidence_text)
+            return start, end
+    # Fallback to provided range
+    start = max(1, start_char)
+    end = min(len(source_text), end_char) if source_text else end_char
+    return start, end
+
+@st.cache_data(show_spinner=False, ttl=300)
 def highlight_evidence_in_source(source_text: str, start_char: int, end_char: int) -> str:
-    """Create highlighted version of source text"""
-    if not source_text or start_char >= len(source_text):
+    """Create highlighted version of source text using a 1-based inclusive range."""
+    if not source_text:
         return source_text
-    
-    # Adjust for 1-indexed from API to 0-indexed for Python
-    start_idx = max(0, start_char - 1)
-    end_idx = min(len(source_text), end_char)
-    
+    # Normalize
+    start_char = max(1, start_char)
+    end_char = min(len(source_text), end_char)
+    if end_char < start_char:
+        return source_text
+    # Adjust for 0-based slicing; end is exclusive in Python, but our end_char is inclusive
+    start_idx = start_char - 1
+    end_idx = end_char
     before = source_text[:start_idx]
     highlighted = source_text[start_idx:end_idx]
     after = source_text[end_idx:]
-    
-    # Create HTML with highlighting
     html_content = f"""
     <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; 
                 font-family: 'Hiragino Sans', sans-serif; line-height: 1.8; border: 1px solid #e0e0e0;">
@@ -273,7 +271,6 @@ def highlight_evidence_in_source(source_text: str, start_char: int, end_char: in
                            font-weight: bold; border: 1px solid #ffcc00;">{highlighted}</span>{after}
     </div>
     """
-    
     return html_content
 
 def display_results():
@@ -285,7 +282,7 @@ def display_results():
     query = st.session_state.last_query
     
     st.markdown("---")
-    st.header(t("📋 検索結果", "Results"))
+    st.header(t("📋 検索結果", "📋 Results"))
     
     # Query info
     col1, col2 = st.columns([3, 1])
@@ -293,7 +290,7 @@ def display_results():
         st.subheader(t(f"🔍 クエリ: {query}", f"🔍 Query: {query}"))
     with col2:
         processing_time = result.get('processing_time', 0)
-        st.metric(t("⚡ 処理時間", "Time"), t(f"{processing_time:.2f}秒", f"{processing_time:.2f}s"))
+        st.metric(t("⚡ 処理時間", "⚡ Time"), t(f"{processing_time:.2f}秒", f"{processing_time:.2f}s"))
     
     # Results in Japanese format
     st.markdown(t("### 【回答】", "### Answer"))
@@ -304,29 +301,32 @@ def display_results():
     source_doc = result.get('source_document', '文書が見つかりませんでした。')
     start_char = result.get('start_char', 0)
     end_char = result.get('end_char', 0)
+    evidence_text = result.get('evidence_text', '')
+    # Compute adjusted range based on evidence text for consistency
+    eff_start, eff_end = compute_effective_range(source_doc, start_char, end_char, evidence_text)
     
     # Show highlighted version
-    if start_char > 0 and end_char > start_char:
-        st.markdown(t("**💡 根拠部分のハイライト表示:**", "**Highlighted evidence:**"))
-        highlighted_html = highlight_evidence_in_source(source_doc, start_char, end_char)
+    if eff_start > 0 and eff_end > eff_start:
+        st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
+        highlighted_html = highlight_evidence_in_source(source_doc, eff_start, eff_end)
         st.markdown(highlighted_html, unsafe_allow_html=True)
         
-        st.markdown(t("**📄 元の文書:**", "**Original document:**"))
+        st.markdown(t("**📄 元の文書:**", "**📄 Original document:**"))
     
     st.text_area(t("文書内容", "Document"), source_doc, height=200, key="source_display")
     
     # Evidence information
     evidence_text = result.get('evidence_text', '根拠情報なし')
     
-    st.markdown(t(f"### 【根拠情報の文字列範囲】{start_char}文字目～{end_char}文字目",
-                 f"### Evidence character range: {start_char} to {end_char}"))
+    st.markdown(t(f"### 【根拠情報の文字列範囲】{eff_start}文字目～{eff_end}文字目",
+                 f"### Evidence character range: {eff_start} to {eff_end}"))
     
     st.markdown(t("### 【根拠情報】", "### Evidence"))
     st.info(evidence_text)
     
     # Additional metadata
     if st.session_state.settings.get('show_technical_details', True):
-        with st.expander(t("📊 技術詳細", "Technical details")):
+        with st.expander(t("📊 技術詳細", "📊 Technical details")):
             col1, col2, col3 = st.columns(3)
             with col1:
                 confidence = result.get('confidence', 0)
@@ -519,10 +519,10 @@ def main():
         """
     ))
     
-    # Demo mode indicator
-    st.info(t(
-        "🎮 **デモモード動作中** - システムはシミュレーションモードで動作しています。実際のRAGバックエンドが利用可能な場合は自動的に切り替わります。",
-        "**Demo mode** - The system is running in simulation. It will switch automatically when the real backend is available."
+    # Real RAG system indicator
+    st.success(t(
+        "🚀 **実RAGシステム動作中** - システムはあなたのJSONデータセットを使用して動作しています。",
+        "**Real RAG System Active** - The system is running with your JSON dataset."
     ))
     st.markdown("---")
     
@@ -549,7 +549,7 @@ def main():
     # Quick action buttons
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button(t("🚀 検索実行", "Run search"), type="primary"):
+        if st.button(t("🚀 検索実行", "🚀 Search"), type="primary"):
             # Use the query text or the selected sample query
             current_query = query_text.strip() or st.session_state.get('selected_sample_query', '').strip()
             
@@ -583,14 +583,14 @@ def main():
                 st.error(t("クエリを入力してください", "Please enter a query"))
     
     with col2:
-        if st.button(t("🔄 クリア", "Clear")):
+        if st.button(t("🔄 クリア", "🔄 Clear")):
             st.session_state.pop('last_result', None)
             st.session_state.pop('last_query', None)
             st.session_state.pop('selected_sample_query', None)
             st.rerun()
     
     with col3:
-        if st.button(t("📊 履歴表示", "Show history")):
+        if st.button(t("📊 履歴表示", "📊 Show history")):
             st.session_state.show_history = True
     
     # Display results

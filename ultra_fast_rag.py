@@ -59,29 +59,53 @@ class UltraFastRAG:
         return answer, source_text, evidence_text, start_pos, end_pos
     
     def _extract_evidence_fast(self, text: str, query: str) -> Tuple[str, int, int]:
-        """正規表現ベースの超高速根拠抽出"""
+        """正規表現ベースの超高速根拠抽出（簡易スコアリングで精度向上）"""
         # 質問のキーワードを抽出
         keywords = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\w]+', query)
         keywords = [kw for kw in keywords if len(kw) > 1 and kw not in ['とは', '何', 'です', 'ます', 'について']]
-        
-        if not keywords:
-            # フォールバック：最初の100文字
-            evidence = text[:100]
-            return evidence, 0, len(evidence)
-        
-        # 最初のキーワードを含む文を探す
+
         sentences = re.split(r'[。！？.!?]', text)
-        
+        sentences = [s for s in sentences if s]
+
+        if not sentences:
+            snippet = text[:100]
+            return snippet, 0, len(snippet)
+
+        # 作物に関する質問の簡易ヒューリスティック
+        query_has_crop = any(term in query for term in ['作物', 'どのようなもの', '何があります', '対応した'])
+        crop_markers = ['作物', '稲', '麦', '大豆', '小豆', '菜種', 'トウモロコシ', 'など', '・']
+
+        best_sentence = None
+        best_score = -1
+
         for sentence in sentences:
-            if any(keyword in sentence for keyword in keywords):
-                start_pos = text.find(sentence)
-                if start_pos >= 0:
-                    end_pos = start_pos + len(sentence)
-                    return sentence.strip(), start_pos, end_pos
-        
-        # 見つからない場合は最初の文
-        first_sentence = sentences[0] if sentences else text[:100]
-        return first_sentence, 0, len(first_sentence)
+            score = 0
+            # キーワード一致数
+            for kw in keywords:
+                if kw in sentence:
+                    score += 1
+            # 作物系は優先
+            if query_has_crop:
+                for marker in crop_markers:
+                    if marker in sentence:
+                        score += 2
+            # 長すぎる文は軽く減点（読みやすさ優先）
+            if len(sentence) > 200:
+                score -= 1
+
+            if score > best_score:
+                best_sentence = sentence
+                best_score = score
+
+        if best_sentence is None:
+            best_sentence = sentences[0]
+
+        start_pos = text.find(best_sentence)
+        if start_pos < 0:
+            best_sentence = sentences[0]
+            start_pos = 0
+        end_pos = start_pos + len(best_sentence)
+        return best_sentence.strip(), start_pos, end_pos
     
     def _generate_answer_fast(self, evidence: str, query: str) -> str:
         """超簡易回答生成"""

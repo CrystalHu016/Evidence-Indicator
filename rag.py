@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Evidence Indicator RAG System - Clean Implementation
+Evidence Indicator RAG System - Implementation
 Ultra-fast RAG system with Japanese format support and precise character positioning
 """
 
@@ -24,9 +24,9 @@ from ultra_fast_rag import UltraFastRAG
 load_dotenv()
 
 # Configuration
-CHROMA_PATH = "chroma"
-DATA_PATH = "./data/single_20240229.json"
-TEST_DATA_PATH = "./data/test_sample.json"
+CHROMA_PATH = os.environ.get("CHROMA_PATH", "chroma")
+DATA_PATH = os.environ.get("DATA_PATH", "./data/single_20240229.json")
+TEST_DATA_PATH = os.environ.get("TEST_DATA_PATH", "./data/test_sample.json")
 
 def generate_data_store(use_test_data=False):
     """Generate and save the vector data store from documents."""
@@ -94,6 +94,15 @@ def query_data(query_text: str):
     Query the RAG system using UltraFastRAG.
     Returns: (answer, source_document, evidence_text, start_char, end_char)
     """
+    # More robust check: ensure the ChromaDB SQLite file exists.
+    # This prevents errors if the directory exists but is empty or incomplete.
+    chroma_db_file = os.path.join(CHROMA_PATH, "chroma.sqlite3")
+    if not os.path.exists(chroma_db_file):
+        raise FileNotFoundError(
+            f"❌ Vector store is missing or invalid in '{CHROMA_PATH}'.\n"
+            "Please run the 'generate' command to create it."
+        )
+
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key is None:
         raise ValueError("OPENAI_API_KEY is not set in the environment.")
@@ -103,6 +112,30 @@ def query_data(query_text: str):
     answer, source_document, evidence_text, start_char, end_char = ultra_fast_rag.query(query_text)
     
     return answer, source_document, evidence_text, start_char, end_char
+
+def print_results(answer, source_document, evidence_text, start_char, end_char, processing_time=None):
+    """Helper function to print query results in a consistent format."""
+    if processing_time is not None:
+        print(f"\n⚡ Processing time: {processing_time:.2f} seconds")
+    
+    print("\n【回答】")
+    print(answer)
+    
+    if source_document and evidence_text:
+        print(f"\n【検索ヒットのチャンクを含む文書】")
+        print(source_document)
+        print(f"\n【根拠情報の文字列範囲】{start_char + 1}文字目～{end_char}文字目")
+        print(f"\n【根拠情報】")
+        print(evidence_text)
+    else:
+        print("\nNo relevant sources found.")
+
+def main_default_flow(use_test_data=False):
+    """The default flow: generate data store and start interactive mode."""
+    print("--- Generating Data Store ---")
+    generate_data_store(use_test_data=use_test_data)
+    print("--- Data Store Generation Complete ---")
+    interactive_query_loop()
 
 def interactive_query_loop():
     """Interactive query loop for real-time testing."""
@@ -121,20 +154,7 @@ def interactive_query_loop():
             start_time = time.time()
             answer, source_document, evidence_text, start_char, end_char = query_data(query)
             processing_time = time.time() - start_time
-            
-            print(f"\n⚡ Processing time: {processing_time:.2f} seconds")
-            print("\n【回答】")
-            print(answer)
-            
-            if source_document and evidence_text:
-                print(f"\n【検索ヒットのチャンクを含む文書】")
-                print(source_document)
-                print(f"\n【根拠情報の文字列範囲】{start_char + 1}文字目～{end_char}文字目")
-                print(f"\n【根拠情報】")
-                print(evidence_text)
-            else:
-                print("\nNo relevant sources found.")
-                
+            print_results(answer, source_document, evidence_text, start_char, end_char, processing_time)
         except Exception as e:
             print(f"Error: {e}")
         
@@ -143,9 +163,11 @@ def interactive_query_loop():
 def main():
     """Main function with command-line interface."""
     parser = argparse.ArgumentParser(description="Evidence Indicator RAG System")
-    parser.add_argument("action", nargs='?', default=None, 
-                       choices=["generate", "query", "interactive"], 
-                       help="Action to perform.")
+    parser.add_argument("action", nargs='?', default=None,
+                        choices=["generate", "query", "interactive"],
+                        help="Action to perform. If no action is specified, "
+                             "the script will generate the data store and then "
+                             "start interactive mode.")
     parser.add_argument("--query", type=str, help="Query text to search for.")
     parser.add_argument("--test", action="store_true", help="Use test data for faster development.")
     
@@ -162,38 +184,17 @@ def main():
             return
             
         try:
-            answer, source_document, evidence_text, start_char, end_char = query_data(args.query)
-            
-            print("【回答】")
-            print(answer)
-            
-            if source_document and evidence_text:
-                print(f"\n【検索ヒットのチャンクを含む文書】")
-                print(source_document)
-                print(f"\n【根拠情報の文字列範囲】{start_char + 1}文字目～{end_char}文字目")
-                print(f"\n【根拠情報】")
-                print(evidence_text)
+            answer, source, evidence, start, end = query_data(args.query)
+            print_results(answer, source, evidence, start, end)
         except Exception as e:
             print(f"Error: {e}")
             
     elif args.action == "interactive":
         interactive_query_loop()
         
-    else:
-        print("Evidence Indicator RAG System")
-        print("Usage examples:")
-        print("  python rag_clean.py generate [--test]  # Generate vector store")
-        print("  python rag_clean.py query --query 'コンバインとは何ですか'  # Single query")
-        print("  python rag_clean.py interactive  # Interactive mode")
+    elif args.action is None:
+        # Default behavior when no action is specified
+        main_default_flow(use_test_data=args.test)
 
 if __name__ == "__main__":
-    # Default behavior: generate data store and start interactive mode
-    use_test_data = os.environ.get('USE_TEST_DATA', 'false').lower() == 'true'
-    
-    if len(os.sys.argv) == 1:  # No arguments provided
-        print("--- Generating Data Store ---")
-        generate_data_store(use_test_data=use_test_data)
-        print("--- Data Store Generation Complete ---")
-        interactive_query_loop()
-    else:
-        main()
+    main()

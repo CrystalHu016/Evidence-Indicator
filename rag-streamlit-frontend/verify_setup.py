@@ -53,9 +53,9 @@ def check_files():
     print("\n📁 Checking files...")
     
     required_files = [
-        'app.py',
-        'app_enhanced.py', 
-        'test_ui.py',
+        'streamlit_app.py',
+        'start_streamlit.py',
+        'backend_integration.py',
         'config.py',
         'requirements.txt',
         'run_streamlit.sh',
@@ -94,24 +94,17 @@ def test_imports():
     print("\n🧪 Testing imports...")
     
     try:
-        import app
-        print("✅ app.py - Import OK")
+        import streamlit_app
+        print("✅ streamlit_app.py - Import OK")
     except Exception as e:
-        print(f"❌ app.py - Import failed: {e}")
+        print(f"❌ streamlit_app.py - Import failed: {e}")
         return False
     
     try:
-        import app_enhanced
-        print("✅ app_enhanced.py - Import OK")
+        import backend_integration
+        print("✅ backend_integration.py - Import OK")
     except Exception as e:
-        print(f"❌ app_enhanced.py - Import failed: {e}")
-        return False
-    
-    try:
-        import test_ui
-        print("✅ test_ui.py - Import OK")
-    except Exception as e:
-        print(f"❌ test_ui.py - Import failed: {e}")
+        print(f"❌ backend_integration.py - Import failed: {e}")
         return False
     
     try:
