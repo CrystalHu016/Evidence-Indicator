@@ -42,4 +42,4 @@ echo "📱 Open your browser to: http://localhost:8501"
 echo "🛑 Press Ctrl+C to stop the server"
 echo ""
 
-streamlit run app.py --server.port 8501 --server.address localhost 
+streamlit run streamlit_app.py --server.port 8501 --server.address localhost 

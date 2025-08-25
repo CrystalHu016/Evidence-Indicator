@@ -53,7 +53,7 @@ class AppConfig:
     API_BASE_URL = "http://localhost:8000"  # Backend RAG API
     DEFAULT_TIMEOUT = 30
     BATCH_TIMEOUT = 120
-    MAX_HISTORY_ITEMS = 50
+    MAX_HISTORY_ITEMS = 20
     PAGE_TITLE = "発明原稿 根拠提示装置 | Evidence Indicator RAG System"
     PAGE_ICON = "🔍"
 
@@ -61,20 +61,36 @@ class AppConfig:
 SAMPLE_QUERIES = {
     "Agriculture (農業)": [
         "コンバインとは何ですか",
-        "農業機械の種類について教えてください"
+        "稲作の手順を説明してください",
+        "コンバインの種類と用途の違いを比較してください",
+        "日本の農業機械の分類について詳しく説明してください"
     ],
-    "Language (言語学)": [
-        "音位転倒について説明してください"
+    "Language & Literature (言語・文学)": [
+        "音位転倒について説明してください",
+        "アナグラムとは何ですか",
+        "真っ赤な嘘の意味を教えてください"
     ],
-    "Technology (技術)": [
-        "AI技術の最新動向",
-        "機械学習の応用例",
-        "自然言語処理の手法について"
+    "Science & Nature (科学・自然現象)": [
+        "環水平アークとは何ですか",
+        "毛細管現象について説明してください",
+        "蛙化現象とはどのような現象ですか"
     ],
-    "General (一般)": [
-        "What is artificial intelligence?",
-        "How does machine learning work?",
-        "Explain deep learning concepts"
+    "Culture & Entertainment (文化・エンターテイメント)": [
+        "つちのこについて説明してください",
+        "不知火型とはどのような型ですか",
+        "オレンジペコーとは何ですか"
+    ],
+    "Food & Beverage (飲食)": [
+        "犬に食べさせてはいけないものは何ですか",
+        "蒸留酒と非蒸留酒の分類について"
+    ],
+    "Psychology & Phenomena (心理・現象)": [
+        "ゲシュタルト崩壊とは何ですか",
+        "意味飽和について説明してください"
+    ],
+    "Sports & Games (スポーツ・ゲーム)": [
+        "ペイントボールとは何ですか",
+        "日本がオリンピックで金メダルを取れない種目"
     ]
 }
 
@@ -181,24 +197,37 @@ def call_health_check(api_url: str) -> bool:
     # Always return True for simulation mode
     return True
 
-@st.cache_data(show_spinner=False, ttl=300)
-def _fetch_single_query_cached(api_url: str, query: str, timeout_seconds: int, cache_version: str = "v6_backend_working") -> Tuple[Optional[Dict], Optional[str]]:
+# @st.cache_data(show_spinner=False, ttl=300)  # Disabled to test filtering changes
+def _fetch_single_query_cached(api_url: str, query: str, timeout_seconds: int, cache_version: str = "v9_fixed_paths") -> Tuple[Optional[Dict], Optional[str]]:
     """Pure function for fetching a single query result; safe to cache."""
-    # Try backend integration first (this is the primary method)
+    # Try the new query handler with proper path management
     try:
-        from backend_integration import call_backend_query
-        result, error = call_backend_query(query)
+        from query_handler import query_rag_system
+        import streamlit as st
+        use_multi_chunk = st.session_state.settings.get('use_multi_chunk', True) if 'st' in globals() else True
+        result, error = query_rag_system(query, use_multi_chunk)
         if result and not error:
             return result, None
         elif error:
-            # If backend integration has an error, return it directly (don't fall back to simulation)
             return None, error
     except ImportError:
-        # If backend_integration module not available
-        pass
+        # Fallback to original backend integration
+        try:
+            from backend_integration import call_backend_query
+            import streamlit as st
+            use_multi_chunk = st.session_state.settings.get('use_multi_chunk', True) if 'st' in globals() else True
+            result, error = call_backend_query(query, use_multi_chunk)
+            if result and not error:
+                return result, None
+            elif error:
+                return None, error
+        except ImportError:
+            pass
+        except Exception as e:
+            return None, f"Backend error: {str(e)}"
     except Exception as e:
-        # If there's any other error with backend integration
-        return None, f"Backend error: {str(e)}"
+        # If there's any other error with query handler
+        return None, f"Query handler error: {str(e)}"
 
     # Try HTTP API
     try:
@@ -223,7 +252,7 @@ def call_single_query(api_url: str, query: str) -> Tuple[Optional[Dict], Optiona
     try:
         with st.spinner("🔄 処理中..."):
             timeout_seconds = st.session_state.settings.get('single_timeout', 30)
-            return _fetch_single_query_cached(api_url, query, timeout_seconds, "v6_backend_working")
+            return _fetch_single_query_cached(api_url, query, timeout_seconds, "v8_force_reload_fix")
     except Exception as e:
         return None, str(e)
 
@@ -406,7 +435,7 @@ def query_history_interface():
             st.success(t("履歴をクリアしました！", "History cleared!"))
             st.rerun()
     with col3:
-        show_count = st.selectbox(t("表示件数", "Items to show"), [5, 10, 20, 50], index=1)
+        show_count = st.selectbox(t("表示件数", "Items to show"), [5, 10, 15, 20], index=1)
     
     # Performance chart
     if len(st.session_state.query_history) > 1:
@@ -457,13 +486,21 @@ def query_history_interface():
 def settings_interface():
     """Settings and configuration interface"""
     with st.sidebar:
-        st.header(t("⚙️ 設定", "Settings"))
+        st.header(t("⚙️ 設定", "⚙️ Settings"))
         language_selector_in_sidebar()
         
+        # Query processing settings
+        st.subheader(t("🔧 クエリ処理設定", "🔧 Query processing settings"))
+        use_multi_chunk = st.checkbox(
+            t("複雑クエリで多級ブロック分析を使用", "Use multi-chunk analysis for complex queries"),
+            value=st.session_state.settings.get('use_multi_chunk', True),
+            help=t("複雑な質問に対して段階的なブロック分析を実行します", "Performs progressive chunk analysis for complex queries")
+        )
+        
         # History settings
-        st.subheader(t("履歴設定", "History settings"))
-        max_history = st.slider(t("最大履歴件数", "Max history items"), 10, 100, 
-                               st.session_state.settings['max_history'])
+        st.subheader(t("📚 履歴設定", "📚 History settings"))
+        max_history = st.slider(t("最大履歴件数", "Max history items"), 5, 20, 
+                               min(st.session_state.settings['max_history'], 20))
         
         # Store settings in session state
         st.session_state.settings = {
@@ -472,11 +509,12 @@ def settings_interface():
             'show_technical_details': True,
             'show_timestamps': True,
             'auto_scroll_results': True,
-            'max_history': max_history
+            'max_history': max_history,
+            'use_multi_chunk': use_multi_chunk
         }
         
         # Sample queries
-        st.subheader(t("📝 サンプルクエリ", "Sample queries"))
+        st.subheader(t("📝 サンプルクエリ", "📝 Sample queries"))
         category = st.selectbox(t("カテゴリ", "Category"), list(SAMPLE_QUERIES.keys()), key="category_select")
         
         for i, sample_query in enumerate(SAMPLE_QUERIES[category]):
@@ -519,11 +557,6 @@ def main():
         """
     ))
     
-    # Real RAG system indicator
-    st.success(t(
-        "🚀 **実RAGシステム動作中** - システムはあなたのJSONデータセットを使用して動作しています。",
-        "**Real RAG System Active** - The system is running with your JSON dataset."
-    ))
     st.markdown("---")
     
     # Settings interface (sidebar)
@@ -587,6 +620,8 @@ def main():
             st.session_state.pop('last_result', None)
             st.session_state.pop('last_query', None)
             st.session_state.pop('selected_sample_query', None)
+            st.session_state.pop('query_input', None)
+            st.session_state.pop('show_history', None)
             st.rerun()
     
     with col3:

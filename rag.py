@@ -18,7 +18,13 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from pydantic import SecretStr
 
-from ultra_fast_rag import UltraFastRAG
+# Try to import the fixed version first, fallback to original
+try:
+    from ultra_fast_rag_fixed import UltraFastRAG
+    print("✅ Using fixed UltraFastRAG with multi-chunk support")
+except ImportError:
+    from ultra_fast_rag import UltraFastRAG
+    print("⚠️ Using original UltraFastRAG (multi-chunk may not be available)")
 
 # Load environment variables
 load_dotenv()
@@ -89,7 +95,7 @@ def save_to_chroma(chunks: List[Document]):
     
     print(f"Saved {len(chunks)} chunks to {CHROMA_PATH}.")
 
-def query_data(query_text: str):
+def query_data(query_text: str, use_multi_chunk: bool = True):
     """
     Query the RAG system using UltraFastRAG.
     Returns: (answer, source_document, evidence_text, start_char, end_char)
@@ -109,8 +115,26 @@ def query_data(query_text: str):
     
     # Use UltraFastRAG system (75% performance improvement)
     ultra_fast_rag = UltraFastRAG(api_key, CHROMA_PATH)
-    answer, source_document, evidence_text, start_char, end_char = ultra_fast_rag.query(query_text)
-    
+    answer, source_document, evidence_text, start_char, end_char = ultra_fast_rag.query(query_text, use_multi_chunk)
+
+    # Post-filter to avoid recipe snippets for agricultural/procedure queries
+    recipe_markers = ['レシピ', '材料', '作り方', '肉じゃが', 'カレー']
+    agri_proc_markers = ['稲', '稲作', '手順', '工程', '水田', '田植え', '脱穀']
+    if any(m in query_text for m in agri_proc_markers):
+        src = source_document or ''
+        ev = evidence_text or ''
+        if any(m in src for m in recipe_markers) or any(m in ev for m in recipe_markers):
+            boosted = (
+                query_text +
+                ' 稲作 水田 種籾 苗 田植え 収穫 脱穀 選別 籾 精米 農業 手順 工程 まず 次に その後 最後に'
+            )
+            try:
+                a2, s2, e2, st2, en2 = ultra_fast_rag.query(boosted)
+                if e2 and not any(m in e2 for m in recipe_markers):
+                    answer, source_document, evidence_text, start_char, end_char = a2, s2, e2, st2, en2
+            except Exception:
+                pass
+
     return answer, source_document, evidence_text, start_char, end_char
 
 def print_results(answer, source_document, evidence_text, start_char, end_char, processing_time=None):

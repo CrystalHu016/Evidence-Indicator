@@ -155,7 +155,7 @@ def _pick_evidence_sim(text: str, query: str) -> str:
             best_score = score
     return best.strip()
 
-def call_backend_query(query: str) -> Tuple[Optional[Dict], Optional[str]]:
+def call_backend_query(query: str, use_multi_chunk: bool = True) -> Tuple[Optional[Dict], Optional[str]]:
     """
     Call the backend RAG system directly - no more simulations, use real data only
     """
@@ -163,14 +163,43 @@ def call_backend_query(query: str) -> Tuple[Optional[Dict], Optional[str]]:
         # Fallback gracefully to simulation instead of returning an error
         return simulate_backend_response(query), None
     
+    # Ensure environment variables are loaded
+    try:
+        from dotenv import load_dotenv
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(current_dir)
+        env_path = os.path.join(parent_dir, '.env')
+        load_dotenv(env_path)
+    except Exception as e:
+        print(f"⚠️ Warning: Could not load environment variables: {e}")
+    
     try:
         import time
+        import importlib
+        import sys
+        
+        # Force reload the rag module to get latest changes
+        if 'rag' in sys.modules:
+            importlib.reload(sys.modules['rag'])
+            print("🔄 Force reloaded rag module")
+        
+        # Also force reload ultra_fast_rag module
+        if 'ultra_fast_rag' in sys.modules:
+            importlib.reload(sys.modules['ultra_fast_rag'])
+            print("🔄 Force reloaded ultra_fast_rag module")
+        
         start_time = time.time()
         
         print(f"🔍 Backend integration calling query_data with: '{query}'")
         
         # Call the actual backend function with your JSON dataset
-        answer, source_document, evidence_text, start_char, end_char = query_data(query)
+        # Pass multi_chunk setting if supported
+        try:
+            answer, source_document, evidence_text, start_char, end_char = query_data(query, use_multi_chunk)
+        except TypeError:
+            # Fallback for older backend that doesn't support use_multi_chunk parameter
+            answer, source_document, evidence_text, start_char, end_char = query_data(query)
         
         processing_time = time.time() - start_time
         
