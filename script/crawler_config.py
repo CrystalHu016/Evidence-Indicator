@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Configuration file for SmartNews Business Enhanced Crawler
-SmartNews Business增强爬虫配置文件
+Configuration file for Yahoo!ニュース Enhanced Crawler
+Yahoo!ニュース增强爬虫配置文件
 """
 
 import os
@@ -10,69 +10,96 @@ from typing import List, Dict
 class CrawlerConfig:
     """爬虫配置类"""
     
-    # 基础URL配置
+    # 基础URL配置 - Yahoo!ニュース
     BASE_URLS = {
-        'main': 'https://business.smartnews.com',
-        'newsroom': 'https://business.smartnews.com/newsroom',
-        'blogs': 'https://business.smartnews.com/newsroom/blogs',
-        'company': 'https://business.smartnews.com/company',
-        'careers': 'https://business.smartnews.com/careers',
-        'publishers': 'https://business.smartnews.com/publishers'
+        'main': 'https://news.yahoo.co.jp',
+        'topics': 'https://news.yahoo.co.jp/topics',
+        'domestic': 'https://news.yahoo.co.jp/domestic',
+        'international': 'https://news.yahoo.co.jp/international',
+        'economy': 'https://news.yahoo.co.jp/economy',
+        'entertainment': 'https://news.yahoo.co.jp/entertainment',
+        'sports': 'https://news.yahoo.co.jp/sports',
+        'it': 'https://news.yahoo.co.jp/it',
+        'science': 'https://news.yahoo.co.jp/science',
+        'life': 'https://news.yahoo.co.jp/life',
+        'ranking': 'https://news.yahoo.co.jp/ranking'
     }
     
-    # 核心查询模板 - 基于SmartNews Business网站内容
+    # 核心查询模板 - 基于Yahoo!ニュース内容
     CORE_QUERIES = [
-        # 公司基本信息
-        "What is SmartNews and what is their mission?",
-        "What are SmartNews' company values and principles?",
-        "How does SmartNews contribute to society?",
+        # 新闻分类和内容
+        "What are the main news categories on Yahoo!ニュース?",
+        "What are the current trending topics on Yahoo!ニュース?",
+        "How does Yahoo!ニュース organize its news content?",
+        "What types of news does Yahoo!ニュース cover?",
         
-        # 商业模式
-        "How does SmartNews work with publishers and advertisers?",
-        "What are the key features of SmartNews' business model?",
-        "How does SmartNews balance editorial curation with algorithms?",
+        # 特色功能
+        "What is Yahoo!ニュース Live and how does it work?",
+        "What are the ranking features on Yahoo!ニュース?",
+        "How does Yahoo!ニュース recommend content to users?",
+        "What are the comment and opinion features?",
         
-        # 产品特色
-        "What is the SmartTake Newsletter and what does it offer?",
-        "How does SmartNews ensure quality and trustworthy news?",
-        "What makes SmartNews different from other news platforms?",
+        # 内容质量
+        "How does Yahoo!ニュース ensure news quality?",
+        "What are the sources of news on Yahoo!ニュース?",
+        "How does Yahoo!ニュース handle breaking news?",
+        "What makes Yahoo!ニュース different from other news platforms?",
         
-        # 职业发展
-        "What career opportunities are available at SmartNews?",
-        "What is it like to work at SmartNews?",
-        "How does SmartNews support employee growth?",
-        
-        # 技术特色
-        "How does SmartNews use AI and algorithms?",
-        "What technology does SmartNews use for news aggregation?",
-        "How does SmartNews handle content moderation?",
-        
-        # 合作伙伴
-        "How can publishers partner with SmartNews?",
-        "What are the benefits of advertising with SmartNews?",
-        "How does SmartNews select its publishing partners?"
+        # 用户体验
+        "What are the main features of Yahoo!ニュース?",
+        "How does Yahoo!ニュース organize news by category?",
+        "What are the trending topics and rankings?",
+        "How does Yahoo!ニュース present news to users?"
     ]
     
     # 中文查询版本
     CORE_QUERIES_ZH = [
-        "SmartNews是什么公司，他们的使命是什么？",
-        "SmartNews的公司价值观和原则是什么？",
-        "SmartNews如何为社会做出贡献？",
-        "SmartNews如何与出版商和广告商合作？",
-        "SmartNews商业模式的关键特征是什么？",
-        "SmartNews如何平衡编辑策划和算法？",
-        "SmartTake Newsletter是什么，它提供什么服务？",
-        "SmartNews如何确保新闻质量和可信度？",
-        "SmartNews与其他新闻平台有什么不同？",
-        "SmartNews提供哪些职业机会？",
-        "在SmartNews工作是什么样的体验？",
-        "SmartNews如何支持员工成长？",
-        "SmartNews如何使用AI和算法？",
-        "SmartNews使用什么技术进行新闻聚合？",
-        "SmartNews如何处理内容审核？",
-        "出版商如何与SmartNews合作？",
-        "在SmartNews做广告有什么好处？",
-        "SmartNews如何选择其出版合作伙伴？"
+        "Yahoo!ニュース的主要新闻分类有哪些？",
+        "Yahoo!ニュース上当前的热门话题是什么？",
+        "Yahoo!ニュース如何组织其新闻内容？",
+        "Yahoo!ニュース涵盖哪些类型的新闻？",
+        "Yahoo!ニュース Live是什么，它是如何工作的？",
+        "Yahoo!ニュース的排名功能有哪些？",
+        "Yahoo!ニュース如何向用户推荐内容？",
+        "评论和意见功能有哪些？",
+        "Yahoo!ニュース如何确保新闻质量？",
+        "Yahoo!ニュース的新闻来源是什么？",
+        "Yahoo!ニュース如何处理突发新闻？",
+        "Yahoo!ニュース与其他新闻平台有什么不同？",
+        "Yahoo!ニュース的主要功能有哪些？",
+        "Yahoo!ニュース如何按类别组织新闻？",
+        "热门话题和排名是什么？",
+        "Yahoo!ニュース如何向用户展示新闻？"
+    ]
+    
+    # 日语查询版本
+    CORE_QUERIES_JA = [
+        "Yahoo!ニュースの主要なニュースカテゴリは何ですか？",
+        "Yahoo!ニュースで現在話題になっているトピックは何ですか？",
+        "Yahoo!ニュースはどのようにニュースコンテンツを整理していますか？",
+        "Yahoo!ニュースはどのような種類のニュースをカバーしていますか？",
+        "Yahoo!ニュースライブとは何で、どのように機能しますか？",
+        "Yahoo!ニュースのランキング機能は何ですか？",
+        "Yahoo!ニュースはどのようにユーザーにコンテンツを推薦していますか？",
+        "コメントや意見の機能は何ですか？",
+        "Yahoo!ニュースはどのようにニュースの品質を確保していますか？",
+        "Yahoo!ニュースのニュースソースは何ですか？",
+        "Yahoo!ニュースはどのように速報を処理していますか？",
+        "Yahoo!ニュースを他のニュースプラットフォームと区別するものは何ですか？",
+        "Yahoo!ニュースの主要な機能は何ですか？",
+        "Yahoo!ニュースはどのようにカテゴリ別にニュースを整理していますか？",
+        "話題のトピックとランキングは何ですか？",
+        "Yahoo!ニュースはどのようにユーザーにニュースを提示していますか？",
+        
+        # 基于具体文章内容的问题
+        "Yahoo!ニュースで三菱商事に関する現在の経済ニュースは何ですか？",
+        "Yahoo!ニュースはビジネス・経済記事をどのように提示していますか？",
+        "Yahoo!ニュースのニュース記事に対するコメント機能は何ですか？",
+        "Yahoo!ニュースは記事の更新と修正をどのように処理していますか？",
+        "Yahoo!ニュースの関連記事推薦機能は何ですか？",
+        "Yahoo!ニュースは記事のメタデータ（公開時間、ソースなど）をどのように表示していますか？",
+        "Yahoo!ニュースの異なるニュースカテゴリのランキングシステムは何ですか？",
+        "Yahoo!ニュースはニュースソースと出版社別にコンテンツをどのように整理していますか？"
     ]
     
     # 请求配置
@@ -86,9 +113,9 @@ class CrawlerConfig:
     # 内容解析配置
     PARSING_CONFIG = {
         'max_articles_per_section': 20,
-        'min_title_length': 10,
+        'min_title_length': 5,
         'max_content_length': 3000,  # LLM输入长度限制
-        'content_tags': ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span']
+        'content_tags': ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span', 'a']
     }
     
     # LLM配置
@@ -96,12 +123,12 @@ class CrawlerConfig:
         'model': 'gpt-3.5-turbo',
         'max_tokens': 500,
         'temperature': 0.3,
-        'system_prompt': "你是一个专业的商业分析师，擅长基于SmartNews Business网站内容回答问题。请提供准确、有根据的回答。"
+        'system_prompt': "你是一个专业的新闻分析师，擅长基于Yahoo!ニュース网站内容回答问题。请提供准确、有根据的回答。"
     }
     
     # 输出配置
     OUTPUT_CONFIG = {
-        'output_dir': 'smartnews_dataset',
+        'output_dir': 'yahoo_news_dataset',
         'file_format': 'json',
         'encoding': 'utf-8',
         'include_timestamp': True,
@@ -115,21 +142,22 @@ class CrawlerConfig:
         "original_urls": [],
         "content_summary": "",
         "timestamp": "",
-        "source": "SmartNews Business",
+        "source": "Yahoo!ニュース",
         "crawler_version": "enhanced_v1.0",
         "metadata": {
             "word_count": 0,
             "content_sections": [],
             "publish_date": None,
-            "article_type": ""
+            "article_type": "",
+            "category": ""
         }
     }
     
     @classmethod
     def get_all_queries(cls, language: str = 'en') -> List[str]:
         """获取指定语言的所有查询"""
-        if language.lower() == 'zh':
-            return cls.CORE_QUERIES_ZH
+        if language.lower() == 'ja':
+            return cls.CORE_QUERIES_JA
         return cls.CORE_QUERIES
     
     @classmethod
@@ -140,10 +168,10 @@ class CrawlerConfig:
             urls.append(cls.BASE_URLS[section])
         
         # 添加相关子页面
-        if section == 'newsroom':
-            urls.append(cls.BASE_URLS['blogs'])
-        elif section == 'company':
-            urls.append(cls.BASE_URLS['careers'])
+        if section == 'topics':
+            urls.append(cls.BASE_URLS['ranking'])
+        elif section == 'domestic':
+            urls.append(cls.BASE_URLS['international'])
         
         return urls
     
@@ -163,16 +191,16 @@ class CrawlerConfig:
 # 环境变量配置
 ENV_VARS = {
     'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY'),
-    'SMARTNEWS_CRAWLER_DELAY': os.getenv('SMARTNEWS_CRAWLER_DELAY', '2.0'),
-    'SMARTNEWS_OUTPUT_DIR': os.getenv('SMARTNEWS_OUTPUT_DIR', 'smartnews_dataset'),
-    'SMARTNEWS_MAX_ARTICLES': os.getenv('SMARTNEWS_MAX_ARTICLES', '20')
+    'YAHOO_CRAWLER_DELAY': os.getenv('YAHOO_CRAWLER_DELAY', '2.0'),
+    'YAHOO_OUTPUT_DIR': os.getenv('YAHOO_OUTPUT_DIR', 'yahoo_news_dataset'),
+    'YAHOO_MAX_ARTICLES': os.getenv('YAHOO_MAX_ARTICLES', '20')
 }
 
 # 日志配置
 LOGGING_CONFIG = {
     'level': 'INFO',
     'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    'file': 'crawler.log',
+    'file': 'yahoo_crawler.log',
     'max_size': '10MB',
     'backup_count': 5
 }
@@ -180,8 +208,8 @@ LOGGING_CONFIG = {
 if __name__ == "__main__":
     # 测试配置
     config = CrawlerConfig()
-    print("🔧 Crawler Configuration Test")
-    print("=" * 40)
+    print("🔧 Yahoo!ニュース Crawler Configuration Test")
+    print("=" * 50)
     
     # 验证配置
     validation = config.validate_config()

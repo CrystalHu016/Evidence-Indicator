@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Run script for SmartNews Business Enhanced Crawler
-SmartNews Business增强爬虫运行脚本
+Run script for Yahoo!ニュース Enhanced Crawler
+Yahoo!ニュース增强爬虫运行脚本
 """
 
 import os
@@ -99,7 +99,7 @@ def run_crawler():
     print("\n🚀 Starting enhanced crawler...")
     
     try:
-        from enhanced_crawler import SmartNewsBusinessCrawler
+        from enhanced_crawler import YahooNewsCrawler
         
         # 获取API key
         from dotenv import load_dotenv
@@ -107,7 +107,7 @@ def run_crawler():
         api_key = os.getenv('OPENAI_API_KEY')
         
         # 创建爬虫实例
-        crawler = SmartNewsBusinessCrawler(api_key)
+        crawler = YahooNewsCrawler(api_key)
         
         # 运行完整流程
         start_time = time.time()
@@ -141,7 +141,7 @@ def run_crawler():
 
 def main():
     """主函数"""
-    print("🚀 SmartNews Business Enhanced Crawler - Test Runner")
+    print("🚀 Yahoo!ニュース Enhanced Crawler - Test Runner")
     print("=" * 60)
     
     # 1. 检查依赖
@@ -162,7 +162,7 @@ def main():
     if success:
         print("\n🎊 All tests passed! Enhanced crawler is working correctly.")
         print("\n📝 Next steps:")
-        print("   1. Check the generated dataset in 'smartnews_dataset' folder")
+        print("   1. Check the generated dataset in 'yahoo_news_dataset' folder")
         print("   2. Review the LLM-generated answers")
         print("   3. Customize queries in 'crawler_config.py' if needed")
         print("   4. Integrate with your RAG system")

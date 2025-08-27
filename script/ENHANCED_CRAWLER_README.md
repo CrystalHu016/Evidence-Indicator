@@ -1,14 +1,14 @@
-# SmartNews Business Enhanced Crawler with LLM Integration
+# Yahoo!ニュース Enhanced Crawler with LLM Integration
 
-基于SmartNews Business网站知识的智能回答系统
+基于Yahoo!ニュース网站知识的智能回答系统
 
 ## 🎯 系统概述
 
-这是一个增强的爬虫系统，专门用于从 [SmartNews Business](https://business.smartnews.com/) 网站收集信息，并使用LLM（大语言模型）生成智能回答，创建结构化的数据集。
+这是一个增强的爬虫系统，专门用于从 [Yahoo!ニュース](https://news.yahoo.co.jp/) 网站收集信息，并使用LLM（大语言模型）生成智能回答，创建结构化的数据集。
 
 ## ✨ 主要特性
 
-- **智能内容抓取**: 自动抓取SmartNews Business网站的关键页面
+- **智能内容抓取**: 自动抓取Yahoo!ニュース网站的关键页面
 - **LLM集成**: 使用OpenAI GPT模型基于网站内容生成回答
 - **多语言支持**: 支持英文和中文查询
 - **结构化输出**: 生成标准化的JSON数据集
@@ -21,7 +21,7 @@
 enhanced_crawler.py      # 主要爬虫类
 ├── crawler_config.py    # 配置文件
 ├── run_enhanced_crawler.py  # 运行脚本
-└── smartnews_dataset/   # 输出数据集目录
+└── yahoo_news_dataset/   # 输出数据集目录
 ```
 
 ## 📋 数据集格式
@@ -30,23 +30,17 @@ enhanced_crawler.py      # 主要爬虫类
 
 ```json
 {
-  "core_query": "What is SmartNews and what is their mission?",
+  "core_query": "What are the main news categories on Yahoo!ニュース?",
   "answer": "基于网站内容生成的LLM回答...",
   "original_urls": [
-    "https://business.smartnews.com",
-    "https://business.smartnews.com/newsroom",
-    "https://business.smartnews.com/newsroom/blogs"
+    "https://news.yahoo.co.jp",
+    "https://news.yahoo.co.jp/topics",
+    "https://news.yahoo.co.jp/ranking"
   ],
   "content_summary": "内容来源摘要",
   "timestamp": "2024-01-01T12:00:00",
-  "source": "SmartNews Business",
-  "crawler_version": "enhanced_v1.0",
-  "metadata": {
-    "word_count": 150,
-    "content_sections": ["main_page", "newsroom", "blogs"],
-    "publish_date": null,
-    "article_type": "company_info"
-  }
+  "source": "Yahoo!ニュース",
+  "crawler_version": "enhanced_v1.0"
 }
 ```
 
@@ -83,14 +77,14 @@ python run_enhanced_crawler.py
 
 ```python
 CORE_QUERIES = [
-    "What is SmartNews and what is their mission?",
-    "What are SmartNews' company values?",
+    "What are the main news categories on Yahoo!ニュース?",
+    "What are the current trending topics on Yahoo!ニュース?",
     # 添加更多查询...
 ]
 
 CORE_QUERIES_ZH = [
-    "SmartNews是什么公司，他们的使命是什么？",
-    "SmartNews的公司价值观是什么？",
+    "Yahoo!ニュース的主要新闻分类有哪些？",
+    "Yahoo!ニュース上当前的热门话题是什么？",
     # 添加更多中文查询...
 ]
 ```
@@ -123,13 +117,18 @@ LLM_CONFIG = {
 
 ```python
 BASE_URLS = {
-    'main': 'https://business.smartnews.com',
-    'newsroom': 'https://business.smartnews.com/newsroom',
-    'blogs': 'https://business.smartnews.com/newsroom/blogs',
-    'company': 'https://business.smartnews.com/company',
-    'careers': 'https://business.smartnews.com/careers',
-    'publishers': 'https://business.smartnews.com/publishers',
-    'new_section': 'https://business.smartnews.com/new_section'  # 新增
+    'main': 'https://news.yahoo.co.jp',
+    'topics': 'https://news.yahoo.co.jp/topics',
+    'domestic': 'https://news.yahoo.co.jp/domestic',
+    'international': 'https://news.yahoo.co.jp/international',
+    'economy': 'https://news.yahoo.co.jp/economy',
+    'sports': 'https://news.yahoo.co.jp/sports',
+    'entertainment': 'https://news.yahoo.co.jp/entertainment',
+    'it': 'https://news.yahoo.co.jp/it',
+    'science': 'https://news.yahoo.co.jp/science',
+    'life': 'https://news.yahoo.co.jp/life',
+    'ranking': 'https://news.yahoo.co.jp/ranking',
+    'new_section': 'https://news.yahoo.co.jp/new_section'  # 新增
 }
 ```
 
@@ -148,9 +147,9 @@ def parse_new_section_content(self, html: str) -> List[Dict[str, str]]:
 
 ### 数据集存储
 
-- **默认目录**: `smartnews_dataset/`
+- **默认目录**: `yahoo_news_dataset/`
 - **文件格式**: JSON
-- **命名规则**: `smartnews_dataset_YYYYMMDD_HHMMSS.json`
+- **命名规则**: `yahoo_news_dataset_YYYYMMDD_HHMMSS.json`
 
 ### 数据验证
 
@@ -181,7 +180,7 @@ def parse_new_section_content(self, html: str) -> List[Dict[str, str]]:
 系统会生成详细的日志信息：
 
 ```bash
-tail -f script/crawler.log
+tail -f script/yahoo_crawler.log
 ```
 
 ## 🔮 扩展功能
@@ -191,16 +190,16 @@ tail -f script/crawler.log
 生成的数据集可以直接用于你的RAG系统：
 
 ```python
-from enhanced_crawler import SmartNewsBusinessCrawler
+from enhanced_crawler import YahooNewsCrawler
 
 # 创建爬虫实例
-crawler = SmartNewsBusinessCrawler(api_key)
+crawler = YahooNewsCrawler(api_key)
 
 # 生成数据集
 dataset = crawler.crawl_and_generate_dataset()
 
 # 保存数据集
-crawler.save_dataset(dataset, "smartnews_rag_dataset.json")
+crawler.save_dataset(dataset, "yahoo_news_rag_dataset.json")
 ```
 
 ### 支持更多网站
@@ -208,7 +207,7 @@ crawler.save_dataset(dataset, "smartnews_rag_dataset.json")
 系统设计为可扩展的，可以轻松添加对其他网站的支持：
 
 ```python
-class OtherWebsiteCrawler(SmartNewsBusinessCrawler):
+class OtherWebsiteCrawler(YahooNewsCrawler):
     def __init__(self, api_key):
         super().__init__(api_key)
         self.base_url = 'https://other-website.com'
@@ -220,10 +219,10 @@ class OtherWebsiteCrawler(SmartNewsBusinessCrawler):
 ### 基本使用
 
 ```python
-from enhanced_crawler import SmartNewsBusinessCrawler
+from enhanced_crawler import YahooNewsCrawler
 
 # 初始化爬虫
-crawler = SmartNewsBusinessCrawler(api_key="your_api_key")
+crawler = YahooNewsCrawler(api_key="your_api_key")
 
 # 运行完整流程
 result = crawler.run_full_pipeline()
@@ -237,7 +236,7 @@ if result:
 ```python
 # 自定义查询
 custom_queries = [
-    "How does SmartNews handle user privacy?",
+    "How does Yahoo!ニュース handle user privacy?",
     "What are the latest business developments?"
 ]
 
@@ -258,4 +257,4 @@ for query in custom_queries:
 
 ---
 
-**🎯 开始使用SmartNews Business增强爬虫系统，创建你的智能数据集！**
+**🎯 开始使用Yahoo!ニュース增强爬虫系统，创建你的智能数据集！**
