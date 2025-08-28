@@ -17,8 +17,8 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Set OpenAI API key
-openai.api_key = os.getenv('OPENAI_API_KEY')
+# OpenAI API key will be loaded from environment variable OPENAI_API_KEY
+# The new OpenAI client automatically reads from environment
 
 # Yahoo!ニュース各分类页面URL
 category_urls = {
@@ -47,51 +47,65 @@ def generate_queries_and_answers(content: str, category: str) -> Dict:
     Generate two queries and answers using LLM based on content
     LLMを使用してコンテンツに基づいて2つのクエリと回答を生成
     """
+    if not os.getenv('OPENAI_API_KEY'):
+        print("      ❌ OpenAI API key not found. Cannot generate Q&A without LLM.")
+        return {
+            'query1': '',
+            'answer1': '',
+            'query2': '',
+            'answer2': ''
+        }
+    
     try:
-        if not openai.api_key:
-            print("      ⚠️  OpenAI API key not found, using fallback method")
-            return generate_fallback_qa(content, category)
-        
         print("      🤖 Using LLM to generate queries and answers...")
         
         # Generate two different types of queries
         # 2つの異なるタイプのクエリを生成
         prompt = f"""
-以下のニュース記事の内容を分析して、2つの異なるタイプの質問と回答を生成してください。
+以下のニュース記事の内容を分析して、2つの多様で具体的な質問と回答を生成してください。
 
 記事内容:
-{content[:1000]}...
+{content[:1500]}...
 
 カテゴリ: {category}
 
 要求:
-1. 詳細性の質問: 記事の具体的な事実や詳細について質問
-2. 要約性の質問: 記事の要点や全体像について質問
+1. 記事の内容に基づいた具体的で実用的な質問を作成
+2. 「なぜ」「どのように」「いつ」「どこで」「誰が」「何を」など異なる疑問詞を使用
+3. 一般化可能で教育的価値のある質問を優先
+4. 同じパターンの質問（要約、要点など）を避ける
+5. 記事から学べる知識や仕組みに焦点を当てる
 
-両方の質問は記事の内容から答えを見つけることができるものにしてください。
-回答は記事の内容に基づいて具体的に答えてください。
+質問例のパターン:
+- 「〜の理由は何ですか？」
+- 「〜はどのような仕組みで動作しますか？」  
+- 「〜する際に注意すべきポイントは何ですか？」
+- 「〜の背景にはどのような要因がありますか？」
+- 「〜に関する具体的な数値や詳細は？」
 
 出力形式:
 {{
-    "query1": "詳細性の質問",
-    "answer1": "詳細性の質問への回答",
-    "query2": "要約性の質問", 
-    "answer2": "要約性の質問への回答"
+    "query1": "具体的で泛化可能な質問1",
+    "answer1": "質問1への詳細な回答",
+    "query2": "異なる角度からの具体的な質問2", 
+    "answer2": "質問2への詳細な回答"
 }}
 """
         
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI()
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "あなたはニュース記事を分析して適切な質問と回答を生成する専門家です。"},
+                {"role": "system", "content": "あなたはニュース記事を分析して適切な質問と回答を生成する専門家です。記事の内容に基づいて具体的で有用な質問と回答を日本語で生成してください。"},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=800,
+            max_tokens=1000,
             temperature=0.7
         )
         
         # Parse LLM response
         llm_response = response.choices[0].message.content.strip()
+        print(f"      📝 LLM Response: {llm_response[:100]}...")
         
         try:
             # Try to parse JSON response
@@ -102,51 +116,25 @@ def generate_queries_and_answers(content: str, category: str) -> Dict:
                 'query2': qa_data.get('query2', ''),
                 'answer2': qa_data.get('answer2', '')
             }
-        except json.JSONDecodeError:
-            print("      ⚠️  LLM response parsing failed, using fallback")
-            return generate_fallback_qa(content, category)
+        except json.JSONDecodeError as e:
+            print(f"      ⚠️  LLM response parsing failed: {e}")
+            print(f"      Raw response: {llm_response}")
+            return {
+                'query1': '',
+                'answer1': '',
+                'query2': '',
+                'answer2': ''
+            }
             
     except Exception as e:
-        print(f"      ⚠️  LLM error: {e}, using fallback method")
-        return generate_fallback_qa(content, category)
+        print(f"      ❌ LLM error: {e}")
+        return {
+            'query1': '',
+            'answer1': '',
+            'query2': '',
+            'answer2': ''
+        }
 
-def generate_fallback_qa(content: str, category: str) -> Dict:
-    """
-    Fallback method to generate queries and answers without LLM
-    LLMなしでクエリと回答を生成するフォールバック方法
-    """
-    print("      📝 Using fallback method to generate queries and answers...")
-    
-    # Simple keyword-based query generation
-    # シンプルなキーワードベースのクエリ生成
-    content_lower = content.lower()
-    
-    # Generate first query (detail-oriented)
-    # 最初のクエリを生成（詳細指向）
-    if any(word in content_lower for word in ['死亡', '死亡者', '死亡した']):
-        query1 = f"この{category}ニュースで死亡した人物の詳細は？"
-        answer1 = "記事の内容から死亡に関する詳細情報を確認してください。"
-    elif any(word in content_lower for word in ['金額', '円', '万円', '億円']):
-        query1 = f"この{category}ニュースで言及されている金額は？"
-        answer1 = "記事内で言及されている具体的な金額を確認してください。"
-    elif any(word in content_lower for word in ['日時', '時間', '日付']):
-        query1 = f"この{category}ニュースで言及されている日時は？"
-        answer1 = "記事内で言及されている具体的な日時を確認してください。"
-    else:
-        query1 = f"この{category}ニュースの具体的な事実は？"
-        answer1 = "記事の内容から具体的な事実や詳細を確認してください。"
-    
-    # Generate second query (summary-oriented)
-    # 2番目のクエリを生成（要約指向）
-    query2 = f"この{category}ニュースの要点は？"
-    answer2 = "記事の内容を要約すると、主要なポイントや結論を確認してください。"
-    
-    return {
-        'query1': query1,
-        'answer1': answer1,
-        'query2': query2,
-        'answer2': answer2
-    }
 
 def extract_news_content(news_url: str) -> str:
     """
@@ -248,35 +236,38 @@ def fetch_category_news(category_name: str, url: str, top_n: int = 2) -> List[Di
                     # LLMを使用してクエリと回答を生成
                     qa_data = generate_queries_and_answers(content, category_name)
                     
-                    # Create first entry with query1
-                    # query1で最初のエントリを作成
-                    results.append({
-                        'data_id': f"{category_name}_{i+1}_1",
-                        'category': category_name,
-                        'title': title,
-                        'link': full_url,
-                        'content': content,
-                        'query': qa_data['query1'],
-                        'answer': qa_data['answer1'],
-                        'timestamp': datetime.now().isoformat(),
-                        'source': 'Yahoo!ニュース',
-                        'crawler_version': 'category_page_v3.1'
-                    })
+                    # Only create entries if we have valid Q&A from LLM
+                    if qa_data['query1'] and qa_data['answer1']:
+                        # Create first entry with query1
+                        # query1で最初のエントリを作成
+                        results.append({
+                            'data_id': f"{category_name}_{i+1}_1",
+                            'category': category_name,
+                            'title': title,
+                            'link': full_url,
+                            'content': content,
+                            'query': qa_data['query1'],
+                            'answer': qa_data['answer1'],
+                            'timestamp': datetime.now().isoformat(),
+                            'source': 'Yahoo!ニュース',
+                            'crawler_version': 'category_page_v4.0_llm_only'
+                        })
                     
-                    # Create second entry with query2
-                    # query2で2番目のエントリを作成
-                    results.append({
-                        'data_id': f"{category_name}_{i+1}_2",
-                        'category': category_name,
-                        'title': title,
-                        'link': full_url,
-                        'content': content,
-                        'query': qa_data['query2'],
-                        'answer': qa_data['answer2'],
-                        'timestamp': datetime.now().isoformat(),
-                        'source': 'Yahoo!ニュース',
-                        'crawler_version': 'category_page_v3.1'
-                    })
+                    if qa_data['query2'] and qa_data['answer2']:
+                        # Create second entry with query2  
+                        # query2で2番目のエントリを作成
+                        results.append({
+                            'data_id': f"{category_name}_{i+1}_2",
+                            'category': category_name,
+                            'title': title,
+                            'link': full_url,
+                            'content': content,
+                            'query': qa_data['query2'],
+                            'answer': qa_data['answer2'],
+                            'timestamp': datetime.now().isoformat(),
+                            'source': 'Yahoo!ニュース',
+                            'crawler_version': 'category_page_v4.0_llm_only'
+                        })
                     
                     # Add delay between content extraction and LLM analysis requests
                     # コンテンツ抽出とLLM分析リクエスト間に遅延を追加
@@ -322,9 +313,11 @@ def main():
     print("=" * 80)
     
     # Check OpenAI API key
-    if not openai.api_key:
-        print("⚠️  OpenAI API key not found. Will use fallback method for Q&A generation.")
-        print("   Set OPENAI_API_KEY environment variable for LLM analysis.")
+    if not os.getenv('OPENAI_API_KEY'):
+        print("❌ OpenAI API key not found. Cannot generate Q&A without LLM.")
+        print("   Set OPENAI_API_KEY environment variable to proceed.")
+        print("   Exiting...")
+        return
     
     all_news = []
     
