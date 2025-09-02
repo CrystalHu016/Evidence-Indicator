@@ -8,8 +8,9 @@ from typing import Dict, List
 
 # Dataset Configuration
 ICHIKARA_CONFIG = {
-    # File paths
-    "dataset_path": "./data/ichikara-rag-sampleToMF.json",
+    # File paths - Updated to use the rebuilt dataset
+    "dataset_path": "./data/ichikara-rag-sampleToMF-rebuilt.json",  # Fixed dataset
+    "original_dataset_path": "./data/ichikara-rag-sampleToMF.json",  # Corrupted original (for reference)
     "chroma_path": "./chroma",
     "collection_name": "ichikara_collection",
     
@@ -31,120 +32,37 @@ ICHIKARA_CONFIG = {
         "response",
         "references",
         "timestamp",
-        "misc_tags",
-        "source_type",
-        "chunk_id",
-        "chunk_size",
-        "dataset"
+        "meta"
     ],
     
-    # Content types
-    "content_types": {
-        "instruction": "instruction",
-        "response": "response",
-        "mixed": "mixed"
-    },
+    # Processing options
+    "enable_metadata_extraction": True,
+    "enable_reference_validation": True,
+    "enable_quality_metrics": True,
     
-    # Japanese language settings
-    "japanese_settings": {
-        "sentence_delimiters": ["。", "！", "？", ".", "!", "?"],
-        "word_delimiters": [" ", "　", "、", "，"],
-        "min_word_length": 2,
-        "max_sentence_length": 200
-    },
-    
-    # Reference handling
-    "reference_settings": {
-        "extract_urls": True,
-        "extract_timestamps": True,
-        "validate_references": False,  # Set to True in production
-        "max_references": 10
-    },
-    
-    # Quality settings
-    "quality_settings": {
-        "min_content_length": 50,
-        "max_content_length": 2000,
-        "filter_empty_content": True,
-        "validate_json_structure": True
-    }
+    # Performance settings
+    "batch_size": 100,
+    "max_workers": 4,
+    "chunking_strategy": "recursive"
 }
-
-# Enhanced RAG Configuration
-ENHANCED_RAG_CONFIG = {
-    # Query processing
-    "query_enhancement": {
-        "enable_japanese_processing": True,
-        "enable_instruction_matching": True,
-        "enable_metadata_search": True,
-        "enable_reference_validation": True
-    },
-    
-    # Answer generation
-    "answer_generation": {
-        "include_metadata": True,
-        "include_references": True,
-        "include_timestamps": True,
-        "include_confidence_scores": True,
-        "format_output": "structured"  # "structured", "simple", "detailed"
-    },
-    
-    # Performance optimization
-    "performance": {
-        "enable_caching": True,
-        "cache_ttl": 3600,  # 1 hour
-        "batch_processing": True,
-        "batch_size": 100
-    }
-}
-
-# Integration settings
-INTEGRATION_CONFIG = {
-    # Existing system compatibility
-    "compatibility": {
-        "maintain_existing_format": True,
-        "extend_metadata": True,
-        "backward_compatible": True
-    },
-    
-    # Data migration
-    "migration": {
-        "enable_auto_migration": False,
-        "backup_existing_data": True,
-        "validate_migration": True
-    },
-    
-    # Monitoring and logging
-    "monitoring": {
-        "enable_performance_tracking": True,
-        "log_queries": True,
-        "log_metadata": True,
-        "enable_metrics": True
-    }
-}
-
-def get_config(config_type: str = "ichikara") -> Dict:
-    """Get configuration by type"""
-    configs = {
-        "ichikara": ICHIKARA_CONFIG,
-        "enhanced_rag": ENHANCED_RAG_CONFIG,
-        "integration": INTEGRATION_CONFIG
-    }
-    return configs.get(config_type, {})
 
 def get_dataset_path() -> str:
-    """Get the dataset file path"""
+    """Get the path to the usable dataset file"""
     return ICHIKARA_CONFIG["dataset_path"]
 
+def get_original_dataset_path() -> str:
+    """Get the path to the original corrupted dataset file (for reference)"""
+    return ICHIKARA_CONFIG["original_dataset_path"]
+
 def get_chroma_path() -> str:
-    """Get the ChromaDB path"""
+    """Get the ChromaDB storage path"""
     return ICHIKARA_CONFIG["chroma_path"]
 
 def get_collection_name() -> str:
-    """Get the collection name"""
+    """Get the ChromaDB collection name"""
     return ICHIKARA_CONFIG["collection_name"]
 
-def get_chunk_settings() -> Dict:
+def get_chunk_settings() -> Dict[str, int]:
     """Get text chunking settings"""
     return {
         "chunk_size": ICHIKARA_CONFIG["chunk_size"],
@@ -152,39 +70,62 @@ def get_chunk_settings() -> Dict:
         "max_chunk_size": ICHIKARA_CONFIG["max_chunk_size"]
     }
 
-def get_japanese_settings() -> Dict:
-    """Get Japanese language processing settings"""
-    return ICHIKARA_CONFIG["japanese_settings"]
+def get_search_settings() -> Dict[str, any]:
+    """Get search configuration settings"""
+    return {
+        "search_k": ICHIKARA_CONFIG["search_k"],
+        "similarity_threshold": ICHIKARA_CONFIG["similarity_threshold"],
+        "max_results": ICHIKARA_CONFIG["max_results"]
+    }
 
-def get_reference_settings() -> Dict:
-    """Get reference handling settings"""
-    return ICHIKARA_CONFIG["reference_settings"]
+def get_metadata_fields() -> List[str]:
+    """Get the list of metadata fields to extract"""
+    return ICHIKARA_CONFIG["metadata_fields"]
 
-def get_quality_settings() -> Dict:
-    """Get quality control settings"""
-    return ICHIKARA_CONFIG["quality_settings"]
+def get_processing_options() -> Dict[str, bool]:
+    """Get processing option flags"""
+    return {
+        "enable_metadata_extraction": ICHIKARA_CONFIG["enable_metadata_extraction"],
+        "enable_reference_validation": ICHIKARA_CONFIG["enable_reference_validation"],
+        "enable_quality_metrics": ICHIKARA_CONFIG["enable_quality_metrics"]
+    }
+
+def get_performance_settings() -> Dict[str, any]:
+    """Get performance-related settings"""
+    return {
+        "batch_size": ICHIKARA_CONFIG["batch_size"],
+        "max_workers": ICHIKARA_CONFIG["max_workers"],
+        "chunking_strategy": ICHIKARA_CONFIG["chunking_strategy"]
+    }
 
 def validate_config() -> bool:
     """Validate the configuration settings"""
     try:
-        # Check if dataset file exists
+        # Check if the rebuilt dataset exists
         if not os.path.exists(get_dataset_path()):
-            print(f"❌ Dataset file not found: {get_dataset_path()}")
+            print(f"❌ Rebuilt dataset not found: {get_dataset_path()}")
             return False
         
-        # Check if chroma directory is writable
+        # Check if ChromaDB directory exists or can be created
         chroma_path = get_chroma_path()
         if not os.path.exists(chroma_path):
             try:
                 os.makedirs(chroma_path, exist_ok=True)
+                print(f"✅ Created ChromaDB directory: {chroma_path}")
             except Exception as e:
                 print(f"❌ Cannot create ChromaDB directory: {e}")
                 return False
         
         # Validate chunk settings
         chunk_settings = get_chunk_settings()
-        if chunk_settings["chunk_size"] <= chunk_settings["chunk_overlap"]:
-            print("❌ Chunk size must be greater than chunk overlap")
+        if chunk_settings["chunk_size"] <= 0 or chunk_settings["chunk_overlap"] < 0:
+            print("❌ Invalid chunk settings")
+            return False
+        
+        # Validate search settings
+        search_settings = get_search_settings()
+        if search_settings["search_k"] <= 0 or search_settings["max_results"] <= 0:
+            print("❌ Invalid search settings")
             return False
         
         print("✅ Configuration validation passed")
@@ -194,12 +135,25 @@ def validate_config() -> bool:
         print(f"❌ Configuration validation failed: {e}")
         return False
 
-if __name__ == "__main__":
-    # Test configuration
-    print("🔧 Testing Ichikara Configuration...")
-    validate_config()
-    
-    print(f"\n📁 Dataset Path: {get_dataset_path()}")
+def print_config_summary():
+    """Print a summary of the current configuration"""
+    print("🔧 Ichikara Dataset Configuration Summary")
+    print("=" * 50)
+    print(f"📁 Dataset Path: {get_dataset_path()}")
+    print(f"📁 Original Dataset: {get_original_dataset_path()}")
     print(f"🗄️ ChromaDB Path: {get_chroma_path()}")
     print(f"📚 Collection Name: {get_collection_name()}")
     print(f"✂️ Chunk Settings: {get_chunk_settings()}")
+    print(f"🔍 Search Settings: {get_search_settings()}")
+    print(f"🏷️ Metadata Fields: {get_metadata_fields()}")
+    print(f"⚙️ Processing Options: {get_processing_options()}")
+    print(f"🚀 Performance Settings: {get_performance_settings()}")
+
+if __name__ == "__main__":
+    print_config_summary()
+    print("\n" + "=" * 50)
+    
+    if validate_config():
+        print("✅ Configuration is valid and ready to use")
+    else:
+        print("❌ Configuration has issues that need to be resolved")
