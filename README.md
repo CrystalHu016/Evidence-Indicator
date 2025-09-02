@@ -11,6 +11,9 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
 - **Beautiful UI**: Modern, responsive design with Japanese language support
 - **Quick Query Buttons**: Pre-defined queries for quick testing
 - **Performance Charts**: Visualize system performance over time
+- **🎯 Enhanced Japanese Support**: New Ichikara dataset with rich metadata and reference validation
+- **📚 Instruction-Response Pairs**: Structured Q&A format for better query understanding
+- **🔗 Source Verification**: Built-in reference validation and attribution
 
 ## 📋 Prerequisites
 
@@ -61,6 +64,8 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
 - **Query History**: Access previous queries from the sidebar
 - **Performance Monitoring**: View real-time performance metrics and charts
 - **API Configuration**: Configure backend API settings in the sidebar
+- **🎯 Japanese Queries**: Try Japanese language queries like "上高地について教えて"
+- **🔍 Enhanced Search**: Leverage the new Ichikara dataset for better results
 
 ## 📊 Features Overview
 
@@ -71,6 +76,8 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
   - 【回答】: LLM-generated answer
   - 【検索ヒットのチャンクを含む文書】: Complete source document
   - 【根拠情報】: Extracted evidence with character positions
+  - 【参考情報】: Source references and timestamps (new!)
+  - 【更新日時】: Content update timestamps (new!)
 
 ### Sidebar Features
 - **API Configuration**: Set backend API URL
@@ -82,6 +89,38 @@ A beautiful and interactive web interface for the Evidence Indicator RAG System,
 - **Real-time Metrics**: Processing time tracking
 - **Performance Charts**: Visual performance trends
 - **Statistics Panel**: Query counts and average processing times
+
+## 🆕 New: Ichikara Dataset Integration
+
+### What's New
+The system now includes the **Ichikara RAG Dataset** (`ichikara-rag-sampleToMF.json`), providing:
+
+- **🏔️ Tourism Content**: Detailed guides about Japanese destinations
+- **🏥 Medical Information**: Traditional medicine and health advice  
+- **💕 Lifestyle Guidance**: Dating and relationship advice
+- **📚 Educational Materials**: Structured instructional content
+
+### Enhanced Capabilities
+- **Instruction-Response Pairs**: Better understanding of user queries
+- **Rich Metadata**: References, timestamps, and source validation
+- **Japanese Language Expertise**: High-quality Japanese content
+- **Reference Verification**: Built-in source attribution
+
+### Quick Start with Ichikara Dataset
+
+1. **Test the integration:**
+   ```bash
+   python script/ichikara_dataset_integration.py
+   ```
+
+2. **Try Japanese queries:**
+   - "上高地について教えて" (Tell me about Kamikochi)
+   - "観光地のアクセス方法は？" (How to access tourist spots?)
+   - "伝統的な治療法について" (About traditional treatments)
+
+3. **View enhanced results** with source references and timestamps
+
+For detailed integration instructions, see: [📖 Ichikara Integration Guide](docs/ICHIKARA_INTEGRATION_GUIDE.md)
 
 ## ⚙️ Configuration
 
@@ -97,119 +136,114 @@ API_TIMEOUT=30
 # Streamlit Configuration  
 STREAMLIT_SERVER_PORT=8501
 STREAMLIT_SERVER_ADDRESS=localhost
+
+# OpenAI Configuration (for Ichikara dataset)
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-### Configuration File
+### Ichikara Dataset Configuration
 
-The `config.py` file contains additional settings:
-
-- Default queries for quick access
-- UI configuration parameters
-- Performance thresholds
-- Color schemes
-
-## 🔧 Development
-
-### Project Structure
-
-```
-rag-streamlit-frontend/
-├── app.py              # Main Streamlit application
-├── config.py           # Configuration settings
-├── requirements.txt    # Python dependencies
-├── README.md          # This file
-├── streamlit-env/     # Virtual environment
-└── .env              # Environment variables (create this)
-```
-
-### Adding New Features
-
-1. **New UI Components**: Add to `app.py`
-2. **Configuration**: Update `config.py`
-3. **Dependencies**: Add to `requirements.txt`
-
-## 🌐 Integration
-
-### Backend Integration
-
-To connect to the actual RAG backend:
-
-1. **Update API URL**: Set `API_BASE_URL` in `.env`
-2. **Modify `call_rag_api()`**: Replace simulation with actual API calls
-3. **Test Connection**: Use the health check endpoint
-
-### Example API Integration
+The new dataset can be configured through `config/ichikara_config.py`:
 
 ```python
-def call_rag_api(query: str) -> dict:
-    """Call the actual RAG API"""
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/query",
-            json={"query": query},
-            timeout=API_TIMEOUT
-        )
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        st.error(f"API呼び出しエラー: {str(e)}")
-        return None
+# Customize chunk sizes, search parameters, and quality settings
+from config.ichikara_config import get_config, get_chunk_settings
+
+chunk_settings = get_chunk_settings()
+chunk_settings["chunk_size"] = 400  # Larger chunks
+chunk_settings["chunk_overlap"] = 150  # More overlap
 ```
 
-## 📈 Performance
+## 🔧 System Architecture
 
-- **Fast Loading**: Optimized for quick startup
-- **Responsive UI**: Smooth interactions and real-time updates
-- **Memory Efficient**: Session state management for optimal performance
-- **Scalable**: Designed to handle multiple concurrent users
+### Core Components
+- **Streamlit Frontend**: Beautiful web interface
+- **UltraFastRAG**: High-performance RAG engine
+- **ChromaDB**: Vector database for embeddings
+- **OpenAI Embeddings**: Text vectorization
+- **🎯 Ichikara Integrator**: Enhanced dataset processor
 
-## 🎨 UI/UX Features
+### Data Flow
+1. **User Query** → Streamlit Interface
+2. **Query Processing** → Enhanced RAG System
+3. **Vector Search** → ChromaDB + Ichikara Dataset
+4. **Result Generation** → Rich metadata + source validation
+5. **Response Display** → Beautiful UI with references
 
-- **Japanese Language Support**: Full Japanese interface
-- **Responsive Design**: Works on desktop and mobile
-- **Dark/Light Mode**: Automatic theme detection
-- **Accessibility**: Keyboard navigation and screen reader support
-- **Error Handling**: Graceful error messages and recovery
+## 📈 Performance & Quality
 
-## 🔍 Troubleshooting
+### Enhanced Metrics
+- **Query Processing Time**: Real-time performance tracking
+- **Result Quality**: Metadata richness and reference validation
+- **Content Coverage**: Japanese language expertise expansion
+- **Source Reliability**: Built-in verification capabilities
+
+### Quality Assurance
+- **Content Validation**: JSON structure and content quality checks
+- **Reference Verification**: Source URL validation and timestamp tracking
+- **Metadata Enrichment**: Enhanced search and filtering capabilities
+- **Performance Optimization**: Batch processing and caching
+
+## 🚨 Troubleshooting
 
 ### Common Issues
 
-1. **Port Already in Use**:
+1. **Dataset Integration Problems**
    ```bash
-   streamlit run app.py --server.port 8502
+   # Validate configuration
+   python config/ichikara_config.py
+   
+   # Test integration
+   python script/ichikara_dataset_integration.py
    ```
 
-2. **API Connection Issues**:
-   - Check API_BASE_URL in `.env`
-   - Verify backend is running
-   - Check network connectivity
+2. **Performance Issues**
+   - Check chunk size settings in configuration
+   - Monitor memory usage during large dataset processing
+   - Verify OpenAI API key and rate limits
 
-3. **Dependencies Issues**:
-   ```bash
-   pip install --upgrade -r requirements.txt
-   ```
+3. **Japanese Content Issues**
+   - Ensure proper UTF-8 encoding
+   - Check Japanese language processing settings
+   - Validate text chunking parameters
 
-### Debug Mode
+### Getting Help
 
-Run with debug information:
+- **📖 Documentation**: Check the integration guide
+- **🔧 Configuration**: Review `config/ichikara_config.py`
+- **🐛 Issues**: Check GitHub repository for known problems
+- **💬 Support**: Review troubleshooting section in integration guide
 
-```bash
-streamlit run app.py --logger.level debug
-```
+## 🔮 Future Roadmap
 
-## 📝 License
+### Upcoming Features
+- **Multi-language Expansion**: Beyond Japanese content
+- **Advanced Analytics**: Deep insights into dataset usage
+- **Automated Updates**: Sync with source content changes
+- **Confidence Scoring**: Reliability metrics for responses
 
-This project is part of the Evidence Indicator RAG System.
+### Integration Enhancements
+- **Unified Query Interface**: Seamless system integration
+- **Advanced Metadata Search**: Enhanced filtering capabilities
+- **Performance Optimization**: Further speed improvements
+- **Quality Metrics**: Automated content assessment
+
+## 📚 Additional Resources
+
+- **🎯 Ichikara Integration Guide**: [docs/ICHIKARA_INTEGRATION_GUIDE.md](docs/ICHIKARA_INTEGRATION_GUIDE.md)
+- **🔧 Configuration Reference**: [config/ichikara_config.py](config/ichikara_config.py)
+- **🚀 Integration Scripts**: [script/ichikara_dataset_integration.py](script/ichikara_dataset_integration.py)
+- **📊 Dataset Analysis**: See the comprehensive dataset exploration above
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+We welcome contributions to enhance the system:
+
+1. **Dataset Improvements**: Add more content categories
+2. **Performance Optimization**: Enhance processing speed
+3. **Feature Development**: New capabilities and integrations
+4. **Documentation**: Improve guides and examples
 
 ---
 
-**🔍 Evidence Indicator RAG System | Streamlit Frontend | Powered by Streamlit**
+**🚀 Ready to explore the enhanced Japanese RAG system? Start with the Ichikara dataset integration! 🇯🇵✨**
