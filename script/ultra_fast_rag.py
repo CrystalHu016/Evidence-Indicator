@@ -1,16 +1,35 @@
 #!/usr/bin/env python3
 """
 超高速RAG系统 - 专门针对性能优化
+现在集成LLM智能ranking功能
 """
 
 import os
 import re
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict, Any
 from pydantic import SecretStr
 import openai
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+
+try:
+    from llm_evidence_ranker import LLMEvidenceRanker
+    LLM_RANKING_AVAILABLE = True
+except ImportError:
+    try:
+        from script.llm_evidence_ranker import LLMEvidenceRanker
+        LLM_RANKING_AVAILABLE = True
+    except ImportError:
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.dirname(__file__))
+            from llm_evidence_ranker import LLMEvidenceRanker
+            LLM_RANKING_AVAILABLE = True
+        except ImportError:
+            print("⚠️ LLM ranking 模块未找到，将使用原始规则评分")
+            LLM_RANKING_AVAILABLE = False
 
 
 class UltraFastRAG:
@@ -19,41 +38,107 @@ class UltraFastRAG:
     _instance = None
     _initialized = False
     
-    def __new__(cls, openai_api_key: str, chroma_path: str):
+    def __new__(cls, openai_api_key: str, chroma_path: str, use_llm_ranking: bool = True):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self, openai_api_key: str, chroma_path: str):
+    def __init__(self, openai_api_key: str, chroma_path: str, use_llm_ranking: bool = True):
         if self._initialized:
             return
             
         self.openai_api_key = openai_api_key
+        self.use_llm_ranking = use_llm_ranking
         self.embedding_function = OpenAIEmbeddings(api_key=SecretStr(openai_api_key))
         self.db = Chroma(persist_directory=chroma_path, embedding_function=self.embedding_function)
+        
+        # 初始化LLM ranking系统
+        if use_llm_ranking and LLM_RANKING_AVAILABLE:
+            try:
+                self.llm_ranker = LLMEvidenceRanker(openai_api_key)
+                print("✅ LLM智能ranking已启用")
+            except Exception as e:
+                print(f"⚠️ LLM ranking初始化失败: {e}，将使用原始方法")
+                self.use_llm_ranking = False
+        else:
+            self.use_llm_ranking = False
+            
         self._initialized = True
     
-    def query(self, query_text: str) -> Tuple[str, str, str, int, int]:
+    def query(self, query_text: str, k: int = 5) -> Tuple[str, str, str, int, int]:
         """
-        超高速クエリ処理
+        增强查询处理 - 现在支持LLM智能ranking
         Returns: (answer, source_document, evidence, start_pos, end_pos)
         """
-        # 1. 単一の最良検索結果のみ取得
+        if self.use_llm_ranking:
+            return self._query_with_llm_ranking(query_text, k)
+        else:
+            return self._query_fast_original(query_text)
+    
+    def _query_with_llm_ranking(self, query_text: str, k: int) -> Tuple[str, str, str, int, int]:
+        """使用LLM ranking的增强查询"""
+        print(f"🧠 使用LLM智能ranking处理查询: '{query_text}'")
+        
+        # 1. 获取更多候选结果
+        search_results = self.db.similarity_search_with_relevance_scores(query_text, k=k)
+        
+        if not search_results:
+            return "情報が見つかりませんでした。", "", "", 0, 0
+        
+        # 2. 转换为LLM ranker的格式
+        chunks = []
+        for doc, score in search_results:
+            chunk = {
+                "content": doc.page_content,
+                "metadata": doc.metadata,
+                "similarity_score": score
+            }
+            chunks.append(chunk)
+        
+        # 3. 使用LLM进行智能排序
+        try:
+            ranked_chunks = self.llm_ranker.rank_and_highlight_chunks(query_text, chunks, top_k=1)
+            
+            if ranked_chunks:
+                best_chunk = ranked_chunks[0]
+                source_text = best_chunk["content"]
+                evidence_text = best_chunk.get("highlighted_content", source_text)
+                
+                # 计算位置（简化处理）
+                start_pos = 0
+                end_pos = len(evidence_text)
+                
+                # 生成答案
+                answer = self._generate_answer_fast(evidence_text, query_text)
+                
+                print(f"✅ LLM ranking完成，最佳匹配评分: {best_chunk.get('final_score', 0):.3f}")
+                
+                return answer, source_text, evidence_text, start_pos, end_pos
+            
+        except Exception as e:
+            print(f"⚠️ LLM ranking失败: {e}，降级使用原始方法")
+        
+        # 降级到原始方法
+        return self._query_fast_original(query_text)
+    
+    def _query_fast_original(self, query_text: str) -> Tuple[str, str, str, int, int]:
+        """原始的超高速查询方法"""
+        # 1. 单一的最佳检索结果
         search_results = self.db.similarity_search_with_relevance_scores(query_text, k=1)
         
         if not search_results:
             return "情報が見つかりませんでした。", "", "", 0, 0
         
-        # 2. 最初の結果のみ使用
+        # 2. 使用第一个结果
         hit_doc = search_results[0][0]
         confidence = search_results[0][1]
         
         source_text = hit_doc.page_content
         
-        # 3. 簡易根拠抽出（正規表現ベース）
+        # 3. 原始的证据抽取
         evidence_text, start_pos, end_pos = self._extract_evidence_fast(source_text, query_text)
         
-        # 4. 簡易回答生成
+        # 4. 生成答案
         answer = self._generate_answer_fast(evidence_text, query_text)
         
         return answer, source_text, evidence_text, start_pos, end_pos

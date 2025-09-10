@@ -1,9 +1,44 @@
+# Advanced RAG Evidence Indicator Environment Configuration
+# Copy this file to .env and fill in your values
+
 # OpenAI API Configuration
 OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_ORGANIZATION=your_organization_id_here
 
-# Test Data Configuration (set to 'true' for faster development)
-USE_TEST_DATA=false
+# System Configuration
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+DEBUG_MODE=false
 
-# Data and Storage Paths
-CHROMA_PATH=chroma
-DATA_PATH=./data/single_20240229.json 
+# Performance Settings
+BATCH_SIZE=100
+MAX_WORKERS=4
+CACHE_TTL=3600
+
+# Vector Store Configuration
+CHROMA_PATH=./chroma_new
+COLLECTION_NAME=evidence_indicator_collection
+
+# Dataset Configuration
+DATASET_PATH=./data/ichikara-rag-sampleToMF-rebuilt.json
+VALIDATE_DATASET=true
+
+# Search Configuration
+DEFAULT_SEARCH_K=3
+SIMILARITY_THRESHOLD=0.7
+MAX_RESULTS=10
+
+# Quality Control
+ENABLE_CONTENT_FILTERING=true
+ENABLE_DUPLICATE_DETECTION=true
+CONFIDENCE_THRESHOLD=0.6
+
+# Logging Configuration
+LOG_FILE=./logs/rag_system.log
+ENABLE_FILE_LOGGING=true
+ENABLE_CONSOLE_LOGGING=true
+
+# API Rate Limiting
+MAX_REQUESTS_PER_MINUTE=60
+REQUEST_TIMEOUT=30
+RETRY_ATTEMPTS=3

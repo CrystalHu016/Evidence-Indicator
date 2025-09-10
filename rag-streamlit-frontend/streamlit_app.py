@@ -146,6 +146,8 @@ def initialize_session_state():
             'auto_scroll_results': True,
             'max_history': AppConfig.MAX_HISTORY_ITEMS
         }
+    if 'cache_cleared' not in st.session_state:
+        st.session_state.cache_cleared = False
 
 def validate_query(query: str) -> Tuple[bool, str]:
     """Validate query input"""
@@ -181,13 +183,15 @@ def call_health_check(api_url: str) -> bool:
     # Always return True for simulation mode
     return True
 
-@st.cache_data(show_spinner=False, ttl=300)
-def _fetch_single_query_cached(api_url: str, query: str, timeout_seconds: int, cache_version: str = "v6_backend_working") -> Tuple[Optional[Dict], Optional[str]]:
+@st.cache_data(show_spinner=False, ttl=60)
+def _fetch_single_query_cached(api_url: str, query: str, timeout_seconds: int, cache_version: str = "v20_llm_relevance") -> Tuple[Optional[Dict], Optional[str]]:
     """Pure function for fetching a single query result; safe to cache."""
     # Try backend integration first (this is the primary method)
     try:
         from backend_integration import call_backend_query
-        result, error = call_backend_query(query)
+        # Get system mode from session state, default to "ultra_fast_original" for speed
+        system_mode = st.session_state.get('system_mode', 'ultra_fast_original')
+        result, error = call_backend_query(query, system_mode)
         if result and not error:
             return result, None
         elif error:
@@ -223,7 +227,7 @@ def call_single_query(api_url: str, query: str) -> Tuple[Optional[Dict], Optiona
     try:
         with st.spinner("🔄 処理中..."):
             timeout_seconds = st.session_state.settings.get('single_timeout', 30)
-            return _fetch_single_query_cached(api_url, query, timeout_seconds, "v6_backend_working")
+            return _fetch_single_query_cached(api_url, query, timeout_seconds, "v20_llm_relevance")
     except Exception as e:
         return None, str(e)
 
@@ -475,6 +479,13 @@ def settings_interface():
             'max_history': max_history
         }
         
+        # System mode - fixed to LLM mode
+        st.subheader(t("⚡ システムモード", "System Mode"))
+        st.info(t("🧠 LLM智能高亮模式 - 使用AI选择最佳证据部分", "🧠 LLM Smart Highlighting - AI selects best evidence"))
+        
+        # Store system mode in session state (fixed to enhanced mode)
+        st.session_state.system_mode = "enhanced"
+        
         # Sample queries
         st.subheader(t("📝 サンプルクエリ", "Sample queries"))
         category = st.selectbox(t("カテゴリ", "Category"), list(SAMPLE_QUERIES.keys()), key="category_select")
@@ -592,6 +603,13 @@ def main():
     with col3:
         if st.button(t("📊 履歴表示", "📊 Show history")):
             st.session_state.show_history = True
+    
+    # Cache clear button
+    if st.button(t("🔄 キャッシュクリア", "🔄 Clear Cache"), help=t("キャッシュをクリアして最新の結果を取得", "Clear cache to get latest results")):
+        st.cache_data.clear()
+        st.session_state.cache_cleared = True
+        st.success(t("✅ キャッシュをクリアしました！", "✅ Cache cleared!"))
+        st.rerun()
     
     # Display results
     display_results()

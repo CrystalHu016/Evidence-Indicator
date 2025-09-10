@@ -25,8 +25,8 @@ load_dotenv()
 
 # Configuration
 CHROMA_PATH = os.environ.get("CHROMA_PATH", "chroma")
-DATA_PATH = os.environ.get("DATA_PATH", "./data/single_20240229.json")
-TEST_DATA_PATH = os.environ.get("TEST_DATA_PATH", "./data/test_sample.json")
+DATA_PATH = os.environ.get("DATA_PATH", "../data/single_20240229.json")
+TEST_DATA_PATH = os.environ.get("TEST_DATA_PATH", "../data/test_sample.json")
 
 def generate_data_store(use_test_data=False):
     """Generate and save the vector data store from documents."""
