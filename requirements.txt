@@ -11,7 +11,7 @@ langchain-chroma>=0.0.5
 chromadb>=0.4.0
 
 # Text processing
-text-splitter>=0.0.1
+# text-splitter>=0.0.1  # Not available, using langchain's text splitter instead
 
 # OpenAI integration
 openai>=1.0.0

@@ -22,22 +22,20 @@ BACKEND_AVAILABLE = False
 enhanced_rag = None
 
 try:
-    # Import only the enhanced RAG system
+    # Import the integrated RAG system (new unified version)
     sys.path.insert(0, os.path.join(parent_dir, "script"))
-    from enhanced_rag_system import EnhancedRAGSystem
+    from ultra_fast_rag_integrated import UltraFastRAG
     BACKEND_AVAILABLE = True
-    print("✅ LLM智能高亮模块加载成功")
+    print("✅ 整合版RAG系统加载成功 (ultra_fast_rag_integrated)")
 except ImportError as e:
-    print(f"⚠️ Enhanced RAG module not available: {e}")
+    print(f"⚠️ Integrated RAG module not available: {e}")
     try:
-        # Try direct import from script directory
-        script_dir = os.path.join(parent_dir, "script")
-        sys.path.insert(0, script_dir)
-        from enhanced_rag_system import EnhancedRAGSystem  
+        # Fallback to enhanced RAG system
+        from enhanced_rag_system import EnhancedRAGSystem
         BACKEND_AVAILABLE = True
-        print("✅ LLM智能高亮模块通过script路径加载成功")
-    except Exception as direct_e:
-        print(f"⚠️ Direct script import also failed: {direct_e}")
+        print("✅ Enhanced RAG系统加载成功 (fallback)")
+    except Exception as fallback_e:
+        print(f"⚠️ Fallback also failed: {fallback_e}")
         print("🔄 Backend not available")
 except Exception as e:
     print(f"❌ Unexpected error loading enhanced backend: {e}")
@@ -51,13 +49,23 @@ if BACKEND_AVAILABLE:
         
         api_key = os.environ.get("OPENAI_API_KEY")
         if api_key:
-            # Initialize only the enhanced RAG system for LLM-based highlighting
-            enhanced_rag = EnhancedRAGSystem(
-                openai_api_key=api_key,
-                chroma_path=os.path.join(parent_dir, "chroma"),
-                model="gpt-4o-mini"
-            )
-            print("✅ LLM智能高亮系统初始化完成")
+            # Check which RAG system to initialize
+            if 'UltraFastRAG' in globals():
+                # Initialize the integrated RAG system
+                enhanced_rag = UltraFastRAG(
+                    openai_api_key=api_key,
+                    chroma_path=os.path.join(parent_dir, "script", "chroma_integrated"),  # Use integrated DB
+                    use_llm_ranking=True
+                )
+                print("✅ 整合版RAG系统初始化完成 - 使用精细chunking和LLM智能排序")
+            else:
+                # Fallback to enhanced RAG system
+                enhanced_rag = EnhancedRAGSystem(
+                    openai_api_key=api_key,
+                    chroma_path=os.path.join(parent_dir, "chroma"),
+                    model="gpt-4o-mini"
+                )
+                print("✅ Enhanced RAG系统初始化完成 (fallback)")
         else:
             print("⚠️ OPENAI_API_KEY not found, backend will use simulation")
             BACKEND_AVAILABLE = False
@@ -190,28 +198,25 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
         
         print(f"🔍 Backend integration calling enhanced LLM RAG with: '{query}'")
         
-        # Use Enhanced RAG System for LLM-based smart highlighting
+        # Use Integrated RAG System for LLM-based smart highlighting
         if enhanced_rag is not None:
-            result = enhanced_rag.query(
-                query_text=query,
-                initial_k=3,
-                final_k=1,
-                use_llm_ranking=True
-            )
+            # 整合版API: query(query_text, k) -> (answer, source_document, evidence_text, start_pos, end_pos)
+            answer, source_document, evidence_text, start_pos, end_pos = enhanced_rag.query(query, k=5)
             
+            processing_time = time.time() - start_time
             backend_result = {
-                "answer": result["answer"],
-                "source_document": result.get("source_document", ""),
-                "evidence_text": result.get("evidence", ""),
-                "highlighted_evidence": result.get("highlighted_evidence", ""),
-                "start_char": 0,
-                "end_char": len(result.get("evidence", "")),
-                "processing_time": result["processing_time"],
+                "answer": answer,
+                "source_document": source_document,
+                "evidence_text": evidence_text,
+                "highlighted_evidence": evidence_text,  # 整合版直接返回精选evidence
+                "start_char": start_pos,
+                "end_char": end_pos,
+                "processing_time": processing_time,
                 "confidence": 0.98,
-                "model": "LLM智能高亮系统",
+                "model": "整合版LLM智能RAG系统",
                 "timestamp": time.time(),
-                "chunks": result.get("chunks", []),
-                "ranking_summary": result.get("ranking_summary", {})
+                "chunks": [],  # 整合版简化输出
+                "ranking_summary": {}
             }
         else:
             return simulate_backend_response(query), None

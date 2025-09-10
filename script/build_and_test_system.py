@@ -65,16 +65,29 @@ class SystemBuilder:
             
             print(f"📄 转换了 {len(documents)} 个文档")
             
-            # 文本分割
-            print("✂️ 分割文档...")
+            # 精细文本分割 - 针对关键词高亮优化
+            print("✂️ 精细分割文档...")
+            
+            # 使用更小的chunk_size来获得更精准的evidence chunks
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=300,
-                chunk_overlap=100,
+                chunk_size=150,        # 减小到150字符 (约1-2个句子)
+                chunk_overlap=30,      # 减小重叠到30字符
                 length_function=len,
                 add_start_index=True,
+                # 优化分隔符，优先在句子边界分割
+                separators=[
+                    "\n\n",           # 段落
+                    "。",             # 句号  
+                    "！",             # 感叹号
+                    "？",             # 问号
+                    "、",             # 顿号
+                    "\n",             # 换行
+                    " ",              # 空格
+                    ""                # 字符级别（最后的备选）
+                ]
             )
             chunks = text_splitter.split_documents(documents)
-            print(f"🔪 分割为 {len(chunks)} 个chunks")
+            print(f"🔪 精细分割为 {len(chunks)} 个chunks (平均 {sum(len(c.page_content) for c in chunks)/len(chunks):.1f} 字符/chunk)")
             
             # 清理旧的向量库
             if os.path.exists(chroma_path):
@@ -257,7 +270,7 @@ def main():
         return
     
     # 配置
-    data_file = "./data/single_20240229.json"  # 使用原来的大数据集 (9,103条数据)
+    data_file = "../data/single_20240229.json"  # 使用原来的大数据集 (9,103条数据)
     chroma_path = "./chroma"  # 使用原来的路径
     
     # 步骤1: 构建系统

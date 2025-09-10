@@ -253,26 +253,57 @@ def compute_effective_range(source_text: str, start_char: int, end_char: int, ev
     return start, end
 
 @st.cache_data(show_spinner=False, ttl=300)
-def highlight_evidence_in_source(source_text: str, start_char: int, end_char: int) -> str:
-    """Create highlighted version of source text using a 1-based inclusive range."""
-    if not source_text:
-        return source_text
-    # Normalize
-    start_char = max(1, start_char)
-    end_char = min(len(source_text), end_char)
-    if end_char < start_char:
-        return source_text
-    # Adjust for 0-based slicing; end is exclusive in Python, but our end_char is inclusive
-    start_idx = start_char - 1
-    end_idx = end_char
-    before = source_text[:start_idx]
-    highlighted = source_text[start_idx:end_idx]
-    after = source_text[end_idx:]
+def highlight_rag_evidence_in_source(source_text: str, evidence_text: str) -> str:
+    """Highlight the RAG-identified evidence chunk - trusting fine-grained chunking algorithm."""
+    if not source_text or not evidence_text:
+        return f"""
+        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; 
+                    font-family: 'Hiragino Sans', sans-serif; line-height: 1.8; border: 1px solid #e0e0e0;">
+            {source_text}
+        </div>
+        """
+    
+    highlighted_text = source_text
+    evidence_clean = evidence_text.strip()
+    
+    # 直接高亮RAG系统返回的evidence chunk (相信精细chunking算法)
+    if evidence_clean and evidence_clean in source_text:
+        highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{evidence_clean}</span>'
+        highlighted_text = source_text.replace(evidence_clean, highlight_span, 1)  # 只替换第一个匹配
+    else:
+        # 智能部分匹配：寻找evidence中存在于source中的最佳匹配片段
+        best_matches = []
+        
+        # 方法1: 按句子分割寻找匹配
+        sentences = evidence_clean.replace('！', '。').replace('？', '。').split('。')
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) >= 10 and sentence in source_text:
+                best_matches.append(sentence)
+        
+        # 方法2: 滑动窗口寻找最长匹配
+        if not best_matches:
+            max_length = 0
+            best_match = ""
+            for i in range(len(evidence_clean)):
+                for j in range(i + 15, min(i + 100, len(evidence_clean) + 1)):  # 15-100字符窗口
+                    candidate = evidence_clean[i:j]
+                    if candidate in source_text and len(candidate) > max_length:
+                        max_length = len(candidate)
+                        best_match = candidate
+            if best_match:
+                best_matches.append(best_match)
+        
+        # 高亮找到的匹配片段
+        for match in best_matches:
+            if match:
+                highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{match}</span>'
+                highlighted_text = highlighted_text.replace(match, highlight_span, 1)
+    
     html_content = f"""
     <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; 
                 font-family: 'Hiragino Sans', sans-serif; line-height: 1.8; border: 1px solid #e0e0e0;">
-        {before}<span style="background-color: #ffff00; padding: 3px 6px; border-radius: 4px; 
-                           font-weight: bold; border: 1px solid #ffcc00;">{highlighted}</span>{after}
+        {highlighted_text}
     </div>
     """
     return html_content
@@ -309,13 +340,12 @@ def display_results():
     # Compute adjusted range based on evidence text for consistency
     eff_start, eff_end = compute_effective_range(source_doc, start_char, end_char, evidence_text)
     
-    # Show highlighted version
-    if eff_start > 0 and eff_end > eff_start:
-        st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
-        highlighted_html = highlight_evidence_in_source(source_doc, eff_start, eff_end)
-        st.markdown(highlighted_html, unsafe_allow_html=True)
-        
-        st.markdown(t("**📄 元の文書:**", "**📄 Original document:**"))
+    # Show highlighted version with RAG evidence
+    st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
+    highlighted_html = highlight_rag_evidence_in_source(source_doc, evidence_text)
+    st.markdown(highlighted_html, unsafe_allow_html=True)
+    
+    st.markdown(t("**📄 元の文書:**", "**📄 Original document:**"))
     
     st.text_area(t("文書内容", "Document"), source_doc, height=200, key="source_display")
     
@@ -478,10 +508,6 @@ def settings_interface():
             'auto_scroll_results': True,
             'max_history': max_history
         }
-        
-        # System mode - fixed to LLM mode
-        st.subheader(t("⚡ システムモード", "System Mode"))
-        st.info(t("🧠 LLM智能高亮模式 - 使用AI选择最佳证据部分", "🧠 LLM Smart Highlighting - AI selects best evidence"))
         
         # Store system mode in session state (fixed to enhanced mode)
         st.session_state.system_mode = "enhanced"
