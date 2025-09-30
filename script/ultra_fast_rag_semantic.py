@@ -463,12 +463,38 @@ class PureSemanticRAG:
                 'reasoning': '没有找到相关文档'
             }
         
-        # 构建上下文
+        # 构建上下文 - 使用所有过滤后的chunks（不再限制为3个）
         context_parts = []
-        for i, chunk in enumerate(semantic_chunks[:3], 1):  # 使用前3个最相关的chunks
+        chunks_details = []
+        for i, chunk in enumerate(semantic_chunks, 1):  # 使用所有过滤后的chunks
             context_parts.append(f"文档{i}: {chunk.content}")
-        
+            # 收集每个chunk的详细评分信息
+            chunks_details.append({
+                'chunk_id': i,
+                'content': chunk.content[:100] + '...' if len(chunk.content) > 100 else chunk.content,
+                'similarity_score': float(chunk.similarity_score),
+                'semantic_relevance': float(chunk.semantic_relevance),
+                'final_score': float(chunk.final_score),
+                'confidence': float(chunk.metadata.get('confidence', 0.0)),
+                'reasoning': chunk.reasoning,
+                'granularity': chunk.granularity
+            })
+
         context = "\n\n".join(context_parts)
+
+        # 打印详细评分信息
+        print("\n📊 检索到的文档评分详情:")
+        print("=" * 80)
+        for detail in chunks_details:
+            print(f"\n文档{detail['chunk_id']}:")
+            print(f"  📝 内容预览: {detail['content']}")
+            print(f"  🎯 向量相似度 (similarity_score): {detail['similarity_score']:.4f}")
+            print(f"  🧠 语义相关性 (semantic_relevance): {detail['semantic_relevance']:.4f}")
+            print(f"  ⭐ 最终得分 (final_score): {detail['final_score']:.4f}")
+            print(f"  💯 置信度 (confidence): {detail['confidence']:.4f}")
+            print(f"  📐 粒度 (granularity): {detail['granularity']}")
+            print(f"  💬 评分理由: {detail['reasoning']}")
+        print("=" * 80)
         
         # 生成回答的prompt
         answer_prompt = f"""
@@ -505,7 +531,8 @@ class PureSemanticRAG:
                 'reasoning': f'基于{len(semantic_chunks)}个相关文档生成',
                 'model': 'PureSemanticRAG',
                 'processing_time': 0.0,
-                'chunks_used': len(semantic_chunks)
+                'chunks_used': len(semantic_chunks),
+                'chunks_details': chunks_details  # 添加详细评分信息
             }
             
         except Exception as e:
@@ -521,20 +548,46 @@ class PureSemanticRAG:
                 'chunks_used': len(semantic_chunks)
             }
     
-    def query_with_answer(self, query: str, k: int = 3) -> Dict[str, Any]:
-        """完整查询流程"""
+    def query_with_answer(self, query: str, k: int = 5, relevance_threshold: float = 0.7) -> Dict[str, Any]:
+        """完整查询流程 - 先检索k个文档，然后过滤相关性≥threshold的文档"""
         start_time = time.time()
-        
-        # 1. 语义检索
+
+        # 1. 语义检索 - 获取top k个候选文档
         semantic_chunks = self.semantic_query(query, k)
-        
-        # 2. 生成回答
-        result = self.generate_answer(query, semantic_chunks)
-        
-        # 3. 添加处理时间
+
+        # 2. 过滤：只保留语义相关性≥threshold的文档
+        filtered_chunks = [
+            chunk for chunk in semantic_chunks
+            if chunk.semantic_relevance >= relevance_threshold
+        ]
+
+        print(f"\n🔍 检索结果统计:")
+        print(f"  📊 初始检索: {len(semantic_chunks)} 个文档")
+        print(f"  ✅ 过滤后 (相关性≥{relevance_threshold}): {len(filtered_chunks)} 个文档")
+
+        # 3. 如果没有符合条件的文档，返回日语抱歉信息
+        if not filtered_chunks:
+            processing_time = time.time() - start_time
+            print(f"  ⚠️ 没有找到相关性≥{relevance_threshold}的文档，返回空结果")
+            return {
+                'answer': '申し訳ございませんが、現在利用可能な関連情報が見つかりませんでした。',
+                'evidence_text': '',
+                'source_document': '',
+                'confidence': 0.0,
+                'reasoning': f'没有找到语义相关性≥{relevance_threshold}的文档',
+                'model': 'PureSemanticRAG',
+                'processing_time': processing_time,
+                'chunks_used': 0,
+                'chunks_details': []
+            }
+
+        # 4. 使用过滤后的文档生成回答
+        result = self.generate_answer(query, filtered_chunks)
+
+        # 5. 添加处理时间
         processing_time = time.time() - start_time
         result['processing_time'] = processing_time
-        
+
         return result
 
 
