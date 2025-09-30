@@ -1,0 +1,165 @@
+# Modern RAG Configuration - Replaces Hardcoded Values
+# This configuration eliminates the need for hardcoded patterns and keywords
+
+# Core Models Configuration
+embedding:
+  model: "text-embedding-3-small"  # Supports multiple languages
+  api_key: "${OPENAI_API_KEY}"
+
+llm:
+  model: "gpt-4o-mini"
+  temperature: 0.1
+  max_tokens: 400
+  api_key: "${OPENAI_API_KEY}"
+
+# Vector Database
+vector_db:
+  type: "chroma"
+  persist_directory: "./vector_store"
+  collection_name: "main_collection"
+
+# Retrieval Settings
+retrieval:
+  top_k: 10
+  similarity_threshold: 0.3
+  use_mmr: true  # Maximum Marginal Relevance for diversity
+
+# Text Processing (Minimal, Configurable)
+text_processing:
+  normalize_whitespace: true
+  semantic_cleaning: false  # LLM-based if enabled
+  auto_detect_language: true
+
+  # Language-specific configs (replace hardcoded lists)
+  languages:
+    japanese:
+      enabled: true
+      # Remove hardcoded separators - use LLM for sentence splitting
+      use_llm_segmentation: true
+    english:
+      enabled: true
+    chinese:
+      enabled: true
+    auto:
+      enabled: true
+
+# Domain Configurations (Dynamic, Not Hardcoded)
+domains:
+  agriculture:
+    # Replace hardcoded keyword lists with semantic boosting
+    semantic_boosting: true
+    boost_factor: 1.2
+
+    # Context enhancement (replaces hardcoded templates)
+    context_enhancement:
+      enabled: true
+      method: "llm_dynamic"  # Not template-based
+
+    # Remove hardcoded crop lists - use semantic understanding
+    use_semantic_classification: true
+
+  general:
+    semantic_boosting: false
+    boost_factor: 1.0
+
+    context_enhancement:
+      enabled: true
+      method: "llm_dynamic"
+
+# Query Understanding (Replaces Hardcoded Patterns)
+query_analysis:
+  # Remove hardcoded question patterns
+  use_llm_intent_detection: true
+
+  # Intent categories (learned, not rule-based)
+  intent_categories:
+    - definition_seeking      # Replaces hardcoded "とは何", "何ですか"
+    - classification_seeking  # Replaces hardcoded "種類", "分類"
+    - procedural             # Replaces hardcoded "手順", "方法"
+    - comparative            # Replaces hardcoded "違い", "比較"
+    - factual               # General factual questions
+    - attribute_query       # Replaces hardcoded attribute patterns
+
+  # Dynamic complexity scoring (no hardcoded thresholds)
+  complexity_analysis:
+    enabled: true
+    method: "llm_based"  # Not length/pattern based
+
+# Chunking Strategy (Dynamic, Not Fixed)
+chunking:
+  # Remove hardcoded granularity levels
+  strategy: "adaptive"
+
+  # Dynamic chunk sizing based on content
+  adaptive_sizing:
+    enabled: true
+    min_chunk_size: 50
+    max_chunk_size: 500
+    target_chunk_size: 300
+    overlap_ratio: 0.15  # 15% overlap
+
+  # Semantic coherence (replace rigid size limits)
+  semantic_coherence:
+    enabled: true
+    coherence_threshold: 0.7
+
+# Answer Generation
+generation:
+  # Remove hardcoded response templates
+  use_dynamic_prompts: true
+
+  # Context assembly (not template-based)
+  context_assembly:
+    method: "semantic_fusion"  # Combine chunks semantically
+    max_context_length: 2000
+
+  # Multi-language support (no language-specific rules)
+  multilingual:
+    enabled: true
+    preserve_query_language: true
+
+  # Quality scoring (replace hardcoded weights)
+  quality_scoring:
+    relevance_weight: 0.4
+    completeness_weight: 0.3
+    coherence_weight: 0.3
+
+# Performance Monitoring
+monitoring:
+  log_queries: true
+  track_performance: true
+  quality_metrics:
+    - answer_relevance
+    - context_precision
+    - retrieval_accuracy
+
+# Migration Settings (For Gradual Transition)
+migration:
+  # Gradual replacement of hardcoded components
+  fallback_to_legacy: false
+
+  # A/B testing between old and new approaches
+  ab_testing:
+    enabled: false
+    traffic_split: 0.5  # 50% to new system
+
+  # Performance comparison
+  compare_with_legacy: false
+
+# Development Settings
+development:
+  debug_mode: false
+  log_level: "INFO"
+  cache_embeddings: true
+
+  # Testing different configurations
+  experiment_configs:
+    - name: "high_precision"
+      retrieval:
+        top_k: 5
+        similarity_threshold: 0.5
+
+    - name: "high_recall"
+      retrieval:
+        top_k: 20
+        similarity_threshold: 0.2

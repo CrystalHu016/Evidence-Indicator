@@ -22,23 +22,23 @@ BACKEND_AVAILABLE = False
 enhanced_rag = None
 
 try:
-    # Import the integrated RAG system (new unified version)
+    # Import the pure semantic RAG system (no hardcoded rules)
     sys.path.insert(0, os.path.join(parent_dir, "script"))
-    from ultra_fast_rag_integrated import UltraFastRAG
+    from ultra_fast_rag_semantic import PureSemanticRAG
     BACKEND_AVAILABLE = True
-    print("✅ 整合版RAG系统加载成功 (ultra_fast_rag_integrated)")
+    print("✅ 纯语义RAG系统加载成功 (ultra_fast_rag_semantic)")
 except ImportError as e:
-    print(f"⚠️ Integrated RAG module not available: {e}")
+    print(f"⚠️ Pure Semantic RAG module not available: {e}")
     try:
-        # Fallback to enhanced RAG system
-        from enhanced_rag_system import EnhancedRAGSystem
+        # Fallback to integrated RAG system
+        from ultra_fast_rag_integrated import UltraFastRAG
         BACKEND_AVAILABLE = True
-        print("✅ Enhanced RAG系统加载成功 (fallback)")
+        print("✅ 整合版RAG系统加载成功 (fallback)")
     except Exception as fallback_e:
         print(f"⚠️ Fallback also failed: {fallback_e}")
         print("🔄 Backend not available")
 except Exception as e:
-    print(f"❌ Unexpected error loading enhanced backend: {e}")
+    print(f"❌ Unexpected error loading pure semantic backend: {e}")
     print("🔄 Backend not available")
 
 # Initialize the RAG systems if available
@@ -50,14 +50,25 @@ if BACKEND_AVAILABLE:
         api_key = os.environ.get("OPENAI_API_KEY")
         if api_key:
             # Check which RAG system to initialize
-            if 'UltraFastRAG' in globals():
-                # Initialize the integrated RAG system
+            if 'PureSemanticRAG' in globals():
+                # Initialize the pure semantic RAG system (no hardcoded rules)
+                enhanced_rag = PureSemanticRAG(api_key)
+                # Build vector store if not exists
+                data_file = os.path.join(parent_dir, "data", "single_20240229.json")
+                if os.path.exists(data_file):
+                    enhanced_rag.build_vector_store(data_file)
+                    print("✅ 纯语义RAG系统初始化完成 - 无硬编码规则，完全基于LLM语义理解")
+                else:
+                    print("⚠️ 数据文件不存在，使用现有向量数据库")
+                    print("✅ 纯语义RAG系统初始化完成 - 无硬编码规则")
+            elif 'UltraFastRAG' in globals():
+                # Fallback to integrated RAG system
                 enhanced_rag = UltraFastRAG(
                     openai_api_key=api_key,
-                    chroma_path=os.path.join(parent_dir, "script", "chroma_integrated"),  # Use integrated DB
+                    chroma_path=os.path.join(parent_dir, "script", "chroma_integrated"),
                     use_llm_ranking=True
                 )
-                print("✅ 整合版RAG系统初始化完成 - 使用精细chunking和LLM智能排序")
+                print("✅ 整合版RAG系统初始化完成 (fallback)")
             else:
                 # Fallback to enhanced RAG system
                 enhanced_rag = EnhancedRAGSystem(
@@ -198,26 +209,47 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
         
         print(f"🔍 Backend integration calling enhanced LLM RAG with: '{query}'")
         
-        # Use Integrated RAG System for LLM-based smart highlighting
+        # Use Pure Semantic RAG System for LLM-based smart highlighting
         if enhanced_rag is not None:
-            # 整合版API: query(query_text, k) -> (answer, source_document, evidence_text, start_pos, end_pos)
-            answer, source_document, evidence_text, start_pos, end_pos = enhanced_rag.query(query, k=5)
-            
-            processing_time = time.time() - start_time
-            backend_result = {
-                "answer": answer,
-                "source_document": source_document,
-                "evidence_text": evidence_text,
-                "highlighted_evidence": evidence_text,  # 整合版直接返回精选evidence
-                "start_char": start_pos,
-                "end_char": end_pos,
-                "processing_time": processing_time,
-                "confidence": 0.98,
-                "model": "整合版LLM智能RAG系统",
-                "timestamp": time.time(),
-                "chunks": [],  # 整合版简化输出
-                "ranking_summary": {}
-            }
+            # Check if it's PureSemanticRAG or UltraFastRAG
+            if hasattr(enhanced_rag, 'query_with_answer') and hasattr(enhanced_rag, 'llm'):
+                # Pure Semantic RAG API: query_with_answer(query_text) -> dict with answer, evidence_text, etc.
+                result = enhanced_rag.query_with_answer(query)
+                
+                processing_time = time.time() - start_time
+                backend_result = {
+                    "answer": result.get("answer", ""),
+                    "source_document": result.get("source_document", ""),
+                    "evidence_text": result.get("evidence_text", ""),
+                    "highlighted_evidence": result.get("evidence_text", ""),
+                    "start_char": result.get("start_char", 0),
+                    "end_char": result.get("end_char", 0),
+                    "processing_time": processing_time,
+                    "confidence": result.get("confidence", 0.95),
+                    "model": "纯语义RAG系统 (无硬编码规则)",
+                    "timestamp": time.time(),
+                    "chunks": result.get("chunks_used", []),
+                    "ranking_summary": result.get("ranking_summary", {})
+                }
+            else:
+                # Fallback to integrated RAG API: query(query_text, k) -> (answer, source_document, evidence_text, start_pos, end_pos)
+                answer, source_document, evidence_text, start_pos, end_pos = enhanced_rag.query(query, k=5)
+                
+                processing_time = time.time() - start_time
+                backend_result = {
+                    "answer": answer,
+                    "source_document": source_document,
+                    "evidence_text": evidence_text,
+                    "highlighted_evidence": evidence_text,
+                    "start_char": start_pos,
+                    "end_char": end_pos,
+                    "processing_time": processing_time,
+                    "confidence": 0.98,
+                    "model": "整合版LLM智能RAG系统",
+                    "timestamp": time.time(),
+                    "chunks": [],
+                    "ranking_summary": {}
+                }
         else:
             return simulate_backend_response(query), None
         
