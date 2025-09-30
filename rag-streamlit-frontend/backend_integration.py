@@ -52,7 +52,10 @@ if BACKEND_AVAILABLE:
             # Check which RAG system to initialize
             if 'PureSemanticRAG' in globals():
                 # Initialize the pure semantic RAG system (no hardcoded rules)
-                enhanced_rag = PureSemanticRAG(api_key)
+                enhanced_rag = PureSemanticRAG(
+                    api_key,
+                    chroma_path=os.path.join(parent_dir, "script", "chroma_semantic")
+                )
                 # Build vector store if not exists
                 data_file = os.path.join(parent_dir, "data", "single_20240229.json")
                 if os.path.exists(data_file):

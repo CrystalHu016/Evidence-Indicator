@@ -193,6 +193,33 @@ class PureSemanticRAG:
             print(f"📁 数据文件: {data_file}")
             print(f"🗄️ 向量数据库路径: {self.chroma_path}")
             
+            # 检查是否已存在向量库
+            if os.path.exists(self.chroma_path) and os.listdir(self.chroma_path):
+                print(f"✅ 加载现有向量数据库: {self.chroma_path}")
+                self.db = Chroma(
+                    persist_directory=self.chroma_path,
+                    embedding_function=self.embedding_function
+                )
+                return True
+            
+            # 尝试使用其他可用的向量数据库
+            alternative_paths = [
+                "./chroma_integrated",
+                "./chroma_semantic_test", 
+                "./chroma_pure_semantic",
+                "./chroma_improved_semantic"
+            ]
+            
+            for alt_path in alternative_paths:
+                if os.path.exists(alt_path) and os.listdir(alt_path):
+                    print(f"✅ 使用替代向量数据库: {alt_path}")
+                    self.chroma_path = alt_path
+                    self.db = Chroma(
+                        persist_directory=self.chroma_path,
+                        embedding_function=self.embedding_function
+                    )
+                    return True
+            
             # 检查数据文件
             if not os.path.exists(data_file):
                 print(f"❌ 数据文件不存在: {data_file}")
