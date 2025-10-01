@@ -54,7 +54,7 @@ class AppConfig:
     DEFAULT_TIMEOUT = 30
     BATCH_TIMEOUT = 120
     MAX_HISTORY_ITEMS = 50
-    PAGE_TITLE = "発明原稿 根拠提示装置 | Evidence Indicator RAG System"
+    PAGE_TITLE = "根拠提示装置 | Evidence Indicator RAG System"
     PAGE_ICON = "🔍"
 
 # Sample queries for different categories

@@ -558,14 +558,14 @@ class PureSemanticRAG:
                 'chunks_used': len(semantic_chunks)
             }
     
-    def query_with_answer(self, query: str, k: int = 5, relevance_threshold: float = 0.7) -> Dict[str, Any]:
-        """完整查询流程 - 先检索k个文档，然后过滤相关性≥threshold的文档"""
+    def query_with_answer(self, query: str, k: int = 8, relevance_threshold: float = 0.4) -> Dict[str, Any]:
+        """完整查询流程 - 支持部分匹配：检索更多文档(k=8)，降低阈值(0.4)以接受部分相关的chunks"""
         start_time = time.time()
 
-        # 1. 语义检索 - 获取top k个候选文档
+        # 1. 语义检索 - 获取top k个候选文档（增加到8个以提高召回率）
         semantic_chunks = self.semantic_query(query, k)
 
-        # 2. 过滤：只保留语义相关性≥threshold的文档
+        # 2. 过滤：只保留语义相关性≥threshold的文档（阈值0.4允许部分匹配）
         filtered_chunks = [
             chunk for chunk in semantic_chunks
             if chunk.semantic_relevance >= relevance_threshold
@@ -591,7 +591,7 @@ class PureSemanticRAG:
                 'chunks_details': []
             }
 
-        # 4. 使用过滤后的文档生成回答
+        # 4. 使用过滤后的文档生成回答（支持多个部分匹配的chunks共同回答）
         result = self.generate_answer(query, filtered_chunks)
 
         # 5. 添加处理时间
