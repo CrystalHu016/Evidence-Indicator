@@ -178,15 +178,15 @@ class PureSemanticRAG:
         # 语义排序系统
         self.semantic_ranker = SemanticLLMRanker(openai_api_key)
         
-        # 配置
+        # 配置 - 优化性能：减少候选数量以提升速度
         self.config = {
             'similarity_threshold': 0.2,
-            'max_candidates': 8,
-            'use_query_expansion': True,
+            'max_candidates': 3,  # 从8减少到3，预计提速50%
+            'use_query_expansion': True,  # 保留查询扩展以保证召回率
             'use_semantic_ranking': True
         }
     
-    def build_vector_store(self, data_file: str, chunk_size: int = 300, chunk_overlap: int = 50) -> bool:
+    def build_vector_store(self, data_file: str, chunk_size: int = 150, chunk_overlap: int = 30) -> bool:
         """构建纯语义向量数据库"""
         try:
             print(f"🏗️ 构建纯语义向量数据库...")
@@ -496,20 +496,23 @@ class PureSemanticRAG:
             print(f"  💬 评分理由: {detail['reasoning']}")
         print("=" * 80)
         
-        # 生成回答的prompt
+        # 生成回答的prompt - 基于原文生成简短总结答案
         answer_prompt = f"""
-        查询: {query}
-        
-        相关文档:
+        用户问题: {query}
+
+        参考文档:
         {context}
-        
-        请基于以上文档生成一个完整、准确的回答。要求：
-        1. 直接回答用户的问题
-        2. 基于文档内容，但用自己的话表达
-        3. 如果查询涉及分类，请列出具体的分类
-        4. 回答要完整、准确、简洁
-        
-        请直接返回回答内容，不需要其他格式。
+
+        请基于参考文档回答用户的问题。要求：
+        1. 仔细阅读参考文档，理解用户问题的核心意图
+        2. 根据文档内容，用简洁的1-2句话直接回答问题的核心要点
+        3. 答案必须完全基于文档内容，不能编造信息
+        4. 使用原文档的表达方式和术语
+        5. 如果是定义类问题（如"とは何ですか"），给出核心定义即可，不需要详细展开
+        6. 如果是分类/列举类问题，列出主要分类或项目即可
+        7. 保持日语原文的表达习惯和语气
+
+        请直接给出简短答案（1-2句话），不需要前缀或额外说明：
         """
         
         try:
