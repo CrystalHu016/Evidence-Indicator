@@ -61,10 +61,10 @@ if BACKEND_AVAILABLE:
                 data_file = os.path.join(parent_dir, "data", "single_20240229.json")
                 if os.path.exists(data_file):
                     enhanced_rag.build_vector_store(data_file)
-                    print("✅ 纯语义RAG系统初始化完成 - 无硬编码规则，完全基于LLM语义理解")
+                    print("✅ Pure semantic RAG system initialized - no hardcoded rules, fully based on LLM semantic understanding")
                 else:
-                    print("⚠️ 数据文件不存在，使用现有向量数据库")
-                    print("✅ 纯语义RAG系统初始化完成 - 无硬编码规则")
+                    print("⚠️ Data file does not exist, using existing vector database")
+                    print("✅ Pure semantic RAG system initialized - no hardcoded rules")
             elif 'UltraFastRAG' in globals():
                 # Fallback to integrated RAG system
                 enhanced_rag = UltraFastRAG(
@@ -72,7 +72,7 @@ if BACKEND_AVAILABLE:
                     chroma_path=os.path.join(parent_dir, "script", "chroma_integrated"),
                     use_llm_ranking=True
                 )
-                print("✅ 整合版RAG系统初始化完成 (fallback)")
+                print("✅ Integrated RAG system initialized (fallback)")
             else:
                 # Fallback to enhanced RAG system
                 enhanced_rag = EnhancedRAGSystem(
@@ -80,7 +80,7 @@ if BACKEND_AVAILABLE:
                     chroma_path=os.path.join(parent_dir, "chroma"),
                     model="gpt-4o-mini"
                 )
-                print("✅ Enhanced RAG系统初始化完成 (fallback)")
+                print("✅ Enhanced RAG system initialized (fallback)")
         else:
             print("⚠️ OPENAI_API_KEY not found, backend will use simulation")
             BACKEND_AVAILABLE = False

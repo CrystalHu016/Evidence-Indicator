@@ -356,8 +356,27 @@ def display_results():
                  f"### Evidence character range: {eff_start} to {eff_end}"))
     
     st.markdown(t("### 【根拠情報】", "### Evidence"))
-    st.info(evidence_text)
-    
+
+    # Strategy 3: Display multiple evidences (if available)
+    evidences = result.get('evidences', [])
+    if evidences and len(evidences) > 0:
+        st.markdown(t("**複数のチャンクから抽出された根拠:**", "**Evidences extracted from multiple chunks:**"))
+        valid_evidences = [e for e in evidences if not e.get('is_empty', True)]
+
+        if valid_evidences:
+            for idx, evidence in enumerate(valid_evidences, 1):
+                chunk_id = evidence.get('chunk_id', idx)
+                extracted = evidence.get('extracted_evidence', '')
+                similarity = evidence.get('similarity_score', 0)
+
+                st.markdown(f"**{t('根拠', 'Evidence')} {idx}** ({t('チャンク', 'Chunk')} {chunk_id}, {t('類似度', 'Similarity')}: {similarity:.3f})")
+                st.info(extracted)
+        else:
+            st.info(evidence_text)
+    else:
+        # Backward compatibility: if no multi-evidence, display original single evidence
+        st.info(evidence_text)
+
     # Additional metadata
     if st.session_state.settings.get('show_technical_details', True):
         with st.expander(t("📊 技術詳細", "📊 Technical details")):
