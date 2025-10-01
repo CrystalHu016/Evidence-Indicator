@@ -240,7 +240,8 @@ class PureSemanticRAG:
                         page_content=content,
                         metadata={
                             'source': 'semantic_rag',
-                            'original_index': len(documents)
+                            'original_index': len(documents),
+                            'original_full_text': content  # 保存完整原文
                         }
                     )
                     documents.append(doc)
@@ -330,23 +331,23 @@ class PureSemanticRAG:
         
         expansion_prompt = f"""
         原始查询: {query}
-        
-        请生成这个查询的2-3个语义等价变体，用|分隔：
-        
-        例如: 農業機械の種類について教えてください|農業機械の分類について|農業機械にはどんな種類がありますか
+
+        请生成这个查询的1个语义等价变体，用|分隔（包含原始查询共2个）：
+
+        例如: 農業機械の種類について教えてください|農業機械の分類について
         """
-        
+
         try:
             response = self.llm.invoke(expansion_prompt)
             content = response.content.strip()
-            
+
             # 安全解析
             if '|' in content:
                 expanded_queries = [q.strip() for q in content.split('|') if q.strip()]
             else:
                 expanded_queries = [query]
-            
-            return expanded_queries[:3]  # 限制变体数量
+
+            return expanded_queries[:2]  # 限制为2个变体（原始+1个）
             
         except Exception as e:
             print(f"⚠️ 查询扩展失败: {e}")
@@ -522,14 +523,20 @@ class PureSemanticRAG:
             # 找到最佳证据文本
             best_chunk = semantic_chunks[0]
             evidence_text = best_chunk.content
-            
+
+            # 获取完整原始文档
+            original_full_text = best_chunk.metadata.get('original_metadata', {}).get('original_full_text', '')
+            if not original_full_text:
+                # 如果没有保存完整原文，使用context作为fallback
+                original_full_text = context
+
             # 计算平均信心度
             avg_confidence = sum(chunk.metadata['confidence'] for chunk in semantic_chunks) / len(semantic_chunks)
-            
+
             return {
                 'answer': answer,
                 'evidence_text': evidence_text,
-                'source_document': context,
+                'source_document': original_full_text,  # 返回完整原始文档
                 'confidence': avg_confidence,
                 'reasoning': f'基于{len(semantic_chunks)}个相关文档生成',
                 'model': 'PureSemanticRAG',
