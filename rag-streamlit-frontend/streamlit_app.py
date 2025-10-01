@@ -61,7 +61,8 @@ class AppConfig:
 SAMPLE_QUERIES = {
     "Agriculture (農業)": [
         "コンバインとは何ですか",
-        "農業機械の種類について教えてください"
+        "農業機械の種類について教えてください",
+        "コンバインとは何かとその構造を説明してください"
     ],
     "Language (言語学)": [
         "音位転倒について説明してください"
@@ -265,40 +266,32 @@ def highlight_rag_evidence_in_source(source_text: str, evidence_text: str) -> st
     
     highlighted_text = source_text
     evidence_clean = evidence_text.strip()
-    
-    # 直接高亮RAG系统返回的evidence chunk (相信精细chunking算法)
-    if evidence_clean and evidence_clean in source_text:
-        highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{evidence_clean}</span>'
-        highlighted_text = source_text.replace(evidence_clean, highlight_span, 1)  # 只替换第一个匹配
+
+    # Strategy: Split evidence by newlines first (LLM uses newlines to separate sentences)
+    # If no newlines, fall back to splitting by sentence delimiters
+    if '\n' in evidence_clean:
+        sentences = [s.strip() for s in evidence_clean.split('\n') if s.strip()]
     else:
-        # 智能部分匹配：寻找evidence中存在于source中的最佳匹配片段
-        best_matches = []
-        
-        # 方法1: 按句子分割寻找匹配
         sentences = evidence_clean.replace('！', '。').replace('？', '。').split('。')
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if len(sentence) >= 10 and sentence in source_text:
-                best_matches.append(sentence)
-        
-        # 方法2: 滑动窗口寻找最长匹配
-        if not best_matches:
-            max_length = 0
-            best_match = ""
-            for i in range(len(evidence_clean)):
-                for j in range(i + 15, min(i + 100, len(evidence_clean) + 1)):  # 15-100字符窗口
-                    candidate = evidence_clean[i:j]
-                    if candidate in source_text and len(candidate) > max_length:
-                        max_length = len(candidate)
-                        best_match = candidate
-            if best_match:
-                best_matches.append(best_match)
-        
-        # 高亮找到的匹配片段
-        for match in best_matches:
-            if match:
-                highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{match}</span>'
-                highlighted_text = highlighted_text.replace(match, highlight_span, 1)
+
+    sentences_to_highlight = []
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        # Only highlight sentences that are substantial and exist in source
+        if len(sentence) >= 10 and sentence in source_text:
+            sentences_to_highlight.append(sentence)
+
+    # Highlight all matching sentences individually
+    for sentence in sentences_to_highlight:
+        highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{sentence}</span>'
+        # Use a unique marker to avoid double-replacement
+        highlighted_text = highlighted_text.replace(sentence, f'__HIGHLIGHT_MARKER_{sentences_to_highlight.index(sentence)}__', 1)
+
+    # Replace markers with actual highlights
+    for idx, sentence in enumerate(sentences_to_highlight):
+        highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{sentence}</span>'
+        highlighted_text = highlighted_text.replace(f'__HIGHLIGHT_MARKER_{idx}__', highlight_span)
     
     html_content = f"""
     <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; 
@@ -337,45 +330,77 @@ def display_results():
     start_char = result.get('start_char', 0)
     end_char = result.get('end_char', 0)
     evidence_text = result.get('evidence_text', '')
+
+    # Get extracted evidences (Strategy 3)
+    evidences = result.get('evidences', [])
+    valid_evidences = [e for e in evidences if not e.get('is_empty', True)]
+
+    # Use extracted evidence for highlighting (more precise than whole chunk)
+    if valid_evidences:
+        # Combine all extracted evidences for highlighting
+        extracted_texts = [e.get('extracted_evidence', '') for e in valid_evidences]
+        combined_extracted = '\n'.join(extracted_texts)
+        display_evidence = combined_extracted
+    else:
+        display_evidence = evidence_text
+
     # Compute adjusted range based on evidence text for consistency
-    eff_start, eff_end = compute_effective_range(source_doc, start_char, end_char, evidence_text)
-    
+    eff_start, eff_end = compute_effective_range(source_doc, start_char, end_char, display_evidence)
+
     # Show highlighted version with RAG evidence
     st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
-    highlighted_html = highlight_rag_evidence_in_source(source_doc, evidence_text)
+    highlighted_html = highlight_rag_evidence_in_source(source_doc, display_evidence)
     st.markdown(highlighted_html, unsafe_allow_html=True)
     
     st.markdown(t("**📄 元の文書:**", "**📄 Original document:**"))
-    
+
     st.text_area(t("文書内容", "Document"), source_doc, height=200, key="source_display")
-    
-    # Evidence information
+
+    # Evidence information - use display_evidence (extracted evidence, not full chunk)
     evidence_text = result.get('evidence_text', '根拠情報なし')
-    
-    st.markdown(t(f"### 【根拠情報の文字列範囲】{eff_start}文字目～{eff_end}文字目",
-                 f"### Evidence character range: {eff_start} to {eff_end}"))
-    
+
+    # Calculate character ranges for each extracted sentence separately
+    # display_evidence contains the fine-grained extraction (e.g. 2 sentences separated by newline)
+    sentence_ranges = []
+    if display_evidence and display_evidence != '根拠情報なし':
+        # Split by newlines to get individual sentences
+        sentences = [s.strip() for s in display_evidence.split('\n') if s.strip()]
+
+        for sentence in sentences:
+            if sentence in source_doc:
+                start_pos = source_doc.index(sentence) + 1  # 1-indexed
+                end_pos = start_pos + len(sentence) - 1
+                sentence_ranges.append(f"{start_pos}文字目～{end_pos}文字目")
+
+    # Display all sentence ranges
+    if sentence_ranges:
+        ranges_text = "、".join(sentence_ranges)
+        st.markdown(t(f"### 【根拠情報の文字列範囲】{ranges_text}",
+                     f"### Evidence character ranges: {ranges_text}"))
+    else:
+        # Fallback to old logic
+        st.markdown(t(f"### 【根拠情報の文字列範囲】{eff_start}文字目～{eff_end}文字目",
+                     f"### Evidence character range: {eff_start} to {eff_end}"))
+
     st.markdown(t("### 【根拠情報】", "### Evidence"))
 
     # Strategy 3: Display multiple evidences (if available)
     evidences = result.get('evidences', [])
+
     if evidences and len(evidences) > 0:
-        st.markdown(t("**複数のチャンクから抽出された根拠:**", "**Evidences extracted from multiple chunks:**"))
         valid_evidences = [e for e in evidences if not e.get('is_empty', True)]
 
         if valid_evidences:
-            for idx, evidence in enumerate(valid_evidences, 1):
-                chunk_id = evidence.get('chunk_id', idx)
+            # Simply display the extracted evidence without chunk/similarity metadata
+            for evidence in valid_evidences:
                 extracted = evidence.get('extracted_evidence', '')
-                similarity = evidence.get('similarity_score', 0)
-
-                st.markdown(f"**{t('根拠', 'Evidence')} {idx}** ({t('チャンク', 'Chunk')} {chunk_id}, {t('類似度', 'Similarity')}: {similarity:.3f})")
                 st.info(extracted)
         else:
-            st.info(evidence_text)
+            # Should not use evidence_text here, use display_evidence instead
+            st.info(display_evidence if display_evidence else evidence_text)
     else:
-        # Backward compatibility: if no multi-evidence, display original single evidence
-        st.info(evidence_text)
+        # Should not use evidence_text here, use display_evidence instead
+        st.info(display_evidence if display_evidence else evidence_text)
 
     # Additional metadata
     if st.session_state.settings.get('show_technical_details', True):
@@ -561,7 +586,7 @@ def main():
     inject_global_styles()
     
     # Main title and description
-    st.title(t("🔍 発明原稿 根拠提示装置", "🔍 Evidence Indicator RAG System"))
+    st.title(t("🔍 根拠提示装置", "🔍 Evidence Indicator RAG System"))
     st.markdown(t(
         """
         **高速検索・根拠抽出システム** - 日本語対応RAGシステム

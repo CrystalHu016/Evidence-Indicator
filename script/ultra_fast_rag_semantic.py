@@ -81,30 +81,43 @@ class SemanticLLMRanker:
             return [enhanced_chunk]
 
     def _evaluate_chunk_semantically(self, query: str, content: str, vector_score: float) -> Tuple[float, str, str]:
-        """Pure semantic evaluation - Fully based on LLM understanding"""
-        
+        """Pure semantic evaluation - Fully based on LLM understanding with lenient scoring"""
+
         evaluation_prompt = f"""
-        查询: {query}
-        参考文本: {content}
-        
-        请评估这个参考文本与查询的语义相关性，并生成回答。要求:
-        1. 评估相关性分数 (0-1之间)
-        2. 说明评估理由
-        3. 基于参考文本生成完整回答
-        
-        返回JSON格式:
+        質問: {query}
+        参考テキスト: {content}
+
+        この参考テキストと質問の意味的関連性を評価し、回答を生成してください。
+
+        重要な評価基準:
+        1. まず、参考テキストが質問の主題と関連しているか確認してください
+           - 質問の主要なキーワード（例：「コンバイン」）が参考テキストの主題と一致する必要があります
+           - 主題が完全に異なる場合（例：質問が「コンバイン」で、テキストが「コンビニスイーツ」や「コンピュータ」）は0.0としてください
+           - 空の要約文（「与えられた文章を要約します」のみ）は0.0としてください
+
+        2. 主題が一致する場合のみ、以下の基準で評価してください：
+           - 質問が複数の側面を含む場合（例：「〜とは何か」と「その構造」）、参考テキストが一部でも回答できれば高スコア
+           - 部分的な情報でも有用であれば0.5以上
+           - 完全に回答できる場合は0.8以上
+
+        評価要件:
+        1. 関連性スコアを評価 (0-1の間)
+        2. 評価理由を説明
+        3. 参考テキストに基づいて回答を生成
+
+        JSON形式で返してください:
         {{
-            "relevance_score": <0-1分数，表示参考文本对查询的相关性>,
-            "reason": "<为什么给出这个相关性分数的理由>",
-            "generated_answer": "<根据参考文本生成的完整回答>"
+            "relevance_score": <0-1のスコア、主題が異なる場合は必ず0.0>,
+            "reason": "<このスコアを付けた理由>",
+            "generated_answer": "<参考テキストに基づいて生成した回答>"
         }}
         """
-        
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是一个智能问答助手，能够准确评估文本相关性并生成完整回答。"},
+                    {"role": "system", "content": "あなたは知的な質問応答アシスタントです。テキストの関連性を正確に評価し、完全な回答を生成できます。"},
                     {"role": "user", "content": evaluation_prompt}
                 ],
                 temperature=0.1,
@@ -112,7 +125,15 @@ class SemanticLLMRanker:
             )
 
             result_text = response.choices[0].message.content.strip()
+            # Debug: write to file
+            with open('/tmp/rag_debug.log', 'a') as f:
+                f.write(f"\n=== LLM Evaluation ===\n")
+                f.write(f"Query: {query}\n")
+                f.write(f"Content: {content[:100]}...\n")
+                f.write(f"Raw response: {result_text}\n")
             relevance_score, reason, generated_answer = self._parse_semantic_response(result_text)
+            with open('/tmp/rag_debug.log', 'a') as f:
+                f.write(f"Parsed score: {relevance_score}\n\n")
 
             return relevance_score, reason, generated_answer
 
@@ -186,7 +207,7 @@ class PureSemanticRAG:
             'use_semantic_ranking': True
         }
 
-    def build_vector_store(self, data_file: str, chunk_size: int = 150, chunk_overlap: int = 30) -> bool:
+    def build_vector_store(self, data_file: str, chunk_size: int = 200, chunk_overlap: int = 50) -> bool:
         """Build pure semantic vector database"""
         try:
             print(f"🏗️ Building pure semantic vector database...")
@@ -257,7 +278,13 @@ class PureSemanticRAG:
             )
 
             chunks = text_splitter.split_documents(documents)
-            print(f"📄 Created {len(chunks)} chunks")
+
+            # Post-process: clean up chunks that start with punctuation
+            for chunk in chunks:
+                # Remove leading punctuation (。！？、etc)
+                chunk.page_content = chunk.page_content.lstrip('。！？、 \n')
+
+            print(f"📄 Created {len(chunks)} chunks (cleaned)")
 
             # Clean up old vector store
             if os.path.exists(self.chroma_path):
@@ -324,17 +351,72 @@ class PureSemanticRAG:
         semantic_chunks.sort(key=lambda x: x.final_score, reverse=True)
         return semantic_chunks[:k]
     
+    def _decompose_query(self, query: str) -> List[str]:
+        """Decompose complex query into sub-questions if applicable"""
+        decomposition_prompt = f"""
+        質問: {query}
+
+        この質問を分析してください。質問が複数の側面を含んでいる場合（例：「〜とは何か」と「その構造」）、独立したサブ質問に分解してください。
+
+        JSON形式で返してください:
+        {{
+            "is_complex": <true/false、複数の側面を含むかどうか>,
+            "sub_questions": [<サブ質問のリスト。単純な質問の場合は元の質問のみ>]
+        }}
+
+        例1:
+        質問: コンバインとは何かとその構造を説明してください
+        回答: {{"is_complex": true, "sub_questions": ["コンバインとは何ですか", "コンバインの構造を説明してください"]}}
+
+        例2:
+        質問: 農業機械の種類について教えてください
+        回答: {{"is_complex": false, "sub_questions": ["農業機械の種類について教えてください"]}}
+        """
+
+        try:
+            response = self.llm.invoke(decomposition_prompt)
+            content = response.content
+
+            # Parse JSON response
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                sub_questions = result.get('sub_questions', [query])
+                is_complex = result.get('is_complex', False)
+
+                if is_complex:
+                    print(f"🔀 Query decomposed into {len(sub_questions)} sub-questions")
+                    for i, sq in enumerate(sub_questions, 1):
+                        print(f"   {i}. {sq}")
+
+                return sub_questions
+            else:
+                print("⚠️ Query decomposition failed, using original query")
+                return [query]
+
+        except Exception as e:
+            print(f"⚠️ Query decomposition error: {e}, using original query")
+            return [query]
+
     def _expand_query_semantically(self, query: str) -> List[str]:
-        """Semantic query expansion"""
+        """Semantic query expansion with decomposition support"""
         if not self.config['use_query_expansion']:
             return [query]
 
+        # First decompose query if complex
+        sub_questions = self._decompose_query(query)
+
+        # If query was decomposed into multiple sub-questions, return them
+        if len(sub_questions) > 1:
+            return sub_questions
+
+        # Otherwise, expand the single query
         expansion_prompt = f"""
-        原始查询: {query}
+        元の質問: {query}
 
-        请生成这个查询的1个语义等价变体，用|分隔（包含原始查询共2个）：
+        この質問の意味的に同等な1つのバリエーションを生成してください。|で区切って返してください（元の質問を含めて合計2つ）：
 
-        例如: 農業機械の種類について教えてください|農業機械の分類について
+        例: 農業機械の種類について教えてください|農業機械の分類について
         """
 
         try:
@@ -500,21 +582,21 @@ class PureSemanticRAG:
 
         # Prompt for generating answer - generate concise summary answer based on original text
         answer_prompt = f"""
-        用户问题: {query}
+        ユーザーの質問: {query}
 
-        参考文档:
+        参考文書:
         {context}
 
-        请基于参考文档回答用户的问题。要求：
-        1. 仔细阅读参考文档，理解用户问题的核心意图
-        2. 根据文档内容，用简洁的1-2句话直接回答问题的核心要点
-        3. 答案必须完全基于文档内容，不能编造信息
-        4. 使用原文档的表达方式和术语
-        5. 如果是定义类问题（如"とは何ですか"），给出核心定义即可，不需要详细展开
-        6. 如果是分类/列举类问题，列出主要分类或项目即可
-        7. 保持日语原文的表达习惯和语气
+        参考文書に基づいてユーザーの質問に回答してください。要件：
+        1. 参考文書を注意深く読み、ユーザーの質問の核心を理解する
+        2. 文書の内容に基づき、簡潔な1-2文で質問の核心的なポイントを直接回答する
+        3. 回答は完全に文書の内容に基づく必要があり、情報を捏造してはいけない
+        4. 原文書の表現方法と用語を使用する
+        5. 定義類の質問（「とは何ですか」など）の場合、核心的な定義のみを示し、詳細な展開は不要
+        6. 分類・列挙類の質問の場合、主要な分類や項目を列挙する
+        7. 日本語原文の表現習慣と語気を保つ
 
-        请直接给出简短答案（1-2句话），不需要前缀或额外说明：
+        簡潔な回答（1-2文）を直接提示してください。前置きや追加説明は不要：
         """
 
         try:
@@ -529,19 +611,44 @@ class PureSemanticRAG:
             for i, chunk in enumerate(semantic_chunks, 1):
                 # Extract evidence from each chunk individually
                 evidence_extraction_prompt = f"""
-                用户问題: {query}
+                ユーザーの質問: {query}
 
-                文档内容: {chunk.content}
+                生成された回答: {answer}
 
-                任務：从上述文档中提取能够回答用户问题的具体根据文本。
+                文書内容: {chunk.content}
 
-                要求：
-                1. 只提取与问题直接相关的文本片段
-                2. 如果该文档包含相关信息，请原样输出相关的文本片段（不要改写）
-                3. 如果该文档不包含直接相关的信息，请输出"空"
-                4. 不要添加任何解释或前缀，只输出文本片段本身
+                タスク：上記の文書から「生成された回答」を**直接サポートする文のみ**を抽出してください。
 
-                请直接输出提取的根据文本（或"空"）：
+                重要な抽出基準：
+                1. **生成された回答に直接含まれている情報または回答を直接サポートする原文の文のみ**を抽出する
+                2. 回答に含まれていない情報（背景説明、例示、詳細な分類など）は除外する
+                3. 抽出した文は元の文書から一字一句そのまま引用する（改変しない）
+                4. 複数の文を抽出する場合は、各文を改行で区切って出力する（一行に一文）
+                5. 文書に回答をサポートする文がない場合は「空」と出力
+
+                抽出例1：
+                質問：コンバインとは何かとその構造を説明してください
+                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は...（詳細説明）...自立型は...（詳細説明）...コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
+                正しい抽出（回答に含まれる2文のみ）：
+                コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
+                コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
+
+                抽出例2：
+                質問：コンバインとは何ですか
+                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は...（詳細説明）...自立型は...（詳細説明）...コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
+                正しい抽出（回答に含まれる1文のみ、種類・構造は回答に含まれないため除外）：
+                コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
+
+                抽出例3：
+                質問：農業機械の種類について教えてください
+                生成された回答：コンバインは普通型と自立型の2種類に大別されます。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は...（詳細説明）...自立型は...（詳細説明）...コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
+                正しい抽出（回答の分類情報をサポートする1文のみ、定義・構造は回答に含まれないため除外）：
+                日本で使われているコンバインは普通型と自立型の2種類に大別されます。
+
+                抽出した根拠テキスト（または「空」）を直接出力してください：
                 """
 
                 try:
@@ -566,7 +673,20 @@ class PureSemanticRAG:
                     evidences.append(evidence_info)
 
                     status = "✅" if not is_empty else "❌"
-                    print(f"{status} Chunk {i} (similarity: {chunk.similarity_score:.3f}): {extracted_evidence[:50]}...")
+                    print(f"{status} Chunk {i} (similarity: {chunk.similarity_score:.3f})")
+                    print(f"   📝 Extracted evidence: {extracted_evidence[:200]}...")
+                    print(f"   📄 Original chunk length: {len(chunk.content)} chars")
+
+                    # Write to debug file
+                    with open('/tmp/rag_evidence_debug.log', 'a', encoding='utf-8') as f:
+                        f.write(f"\n{'='*80}\n")
+                        f.write(f"Query: {query}\n")
+                        f.write(f"Generated Answer: {answer}\n")
+                        f.write(f"Chunk {i} - Similarity: {chunk.similarity_score:.3f}\n")
+                        f.write(f"Original chunk ({len(chunk.content)} chars):\n{chunk.content}\n")
+                        f.write(f"\nExtracted evidence ({len(extracted_evidence)} chars):\n{extracted_evidence}\n")
+                        f.write(f"Is empty: {is_empty}\n")
+                        f.write(f"{'='*80}\n")
 
                 except Exception as e:
                     print(f"⚠️ Chunk {i} evidence extraction failed: {e}")
@@ -623,8 +743,8 @@ class PureSemanticRAG:
                 'evidences': []
             }
     
-    def query_with_answer(self, query: str, k: int = 8, relevance_threshold: float = 0.4) -> Dict[str, Any]:
-        """Complete query workflow - Support partial matching: retrieve more documents (k=8), lower threshold (0.4) to accept partially relevant chunks"""
+    def query_with_answer(self, query: str, k: int = 8, relevance_threshold: float = 0.3) -> Dict[str, Any]:
+        """Complete query workflow - Support partial matching: retrieve more documents (k=8), threshold (0.3) for better recall"""
         start_time = time.time()
 
         # 1. Semantic retrieval - get top k candidate documents (increased to 8 for better recall)

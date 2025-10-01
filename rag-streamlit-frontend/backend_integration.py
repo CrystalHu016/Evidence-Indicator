@@ -52,11 +52,14 @@ if BACKEND_AVAILABLE:
             # Check which RAG system to initialize
             if 'PureSemanticRAG' in globals():
                 # Initialize the pure semantic RAG system (no hardcoded rules)
-                # Using chunk_size=150 for balanced precision and recall
+                # Using chroma_semantic (verified working, better vector retrieval quality)
+                chroma_path_full = os.path.join(parent_dir, "script", "chroma_semantic")
+                print(f"🔄 [BACKEND] Initializing with database: {chroma_path_full}")
                 enhanced_rag = PureSemanticRAG(
                     api_key,
-                    chroma_path=os.path.join(parent_dir, "script", "chroma_semantic_chunk150")
+                    chroma_path=chroma_path_full
                 )
+                print(f"✅ [BACKEND] Database loaded: {enhanced_rag.chroma_path}")
                 # Build vector store if not exists
                 data_file = os.path.join(parent_dir, "data", "single_20240229.json")
                 if os.path.exists(data_file):
@@ -233,7 +236,8 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                     "model": "纯语义RAG系统 (无硬编码规则)",
                     "timestamp": time.time(),
                     "chunks": result.get("chunks_used", []),
-                    "ranking_summary": result.get("ranking_summary", {})
+                    "ranking_summary": result.get("ranking_summary", {}),
+                    "evidences": result.get("evidences", [])  # Pass through Strategy 3 evidences array
                 }
             else:
                 # Fallback to integrated RAG API: query(query_text, k) -> (answer, source_document, evidence_text, start_pos, end_pos)
