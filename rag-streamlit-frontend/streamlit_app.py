@@ -254,47 +254,73 @@ def compute_effective_range(source_text: str, start_char: int, end_char: int, ev
     return start, end
 
 @st.cache_data(show_spinner=False, ttl=300)
-def highlight_rag_evidence_in_source(source_text: str, evidence_text: str) -> str:
-    """Highlight the RAG-identified evidence chunk - trusting fine-grained chunking algorithm."""
-    if not source_text or not evidence_text:
+def highlight_rag_evidence_in_source(source_text: str, evidence_text: str, char_ranges: list = None) -> str:
+    """Highlight the RAG-identified evidence chunk at specific character positions.
+
+    Args:
+        source_text: The full source document
+        evidence_text: The evidence text (for fallback if no char_ranges provided)
+        char_ranges: List of tuples [(start1, end1), (start2, end2), ...] with 1-based positions
+    """
+    if not source_text:
         return f"""
-        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; 
+        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px;
                     font-family: 'Hiragino Sans', sans-serif; line-height: 1.8; border: 1px solid #e0e0e0;">
             {source_text}
         </div>
         """
-    
-    highlighted_text = source_text
-    evidence_clean = evidence_text.strip()
 
-    # Strategy: Split evidence by newlines first (LLM uses newlines to separate sentences)
-    # If no newlines, fall back to splitting by sentence delimiters
-    if '\n' in evidence_clean:
-        sentences = [s.strip() for s in evidence_clean.split('\n') if s.strip()]
+    # If no char_ranges provided, fall back to old logic
+    if not char_ranges:
+        highlighted_text = source_text
+        if evidence_text:
+            evidence_clean = evidence_text.strip()
+            # Strategy: Split evidence by newlines first (LLM uses newlines to separate sentences)
+            if '\n' in evidence_clean:
+                sentences = [s.strip() for s in evidence_clean.split('\n') if s.strip()]
+            else:
+                sentences = evidence_clean.replace('！', '。').replace('？', '。').split('。')
+
+            sentences_to_highlight = []
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if len(sentence) >= 10 and sentence in source_text:
+                    sentences_to_highlight.append(sentence)
+
+            # Highlight all matching sentences individually
+            for sentence in sentences_to_highlight:
+                highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{sentence}</span>'
+                highlighted_text = highlighted_text.replace(sentence, f'__HIGHLIGHT_MARKER_{sentences_to_highlight.index(sentence)}__', 1)
+
+            # Replace markers with actual highlights
+            for idx, sentence in enumerate(sentences_to_highlight):
+                highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{sentence}</span>'
+                highlighted_text = highlighted_text.replace(f'__HIGHLIGHT_MARKER_{idx}__', highlight_span)
     else:
-        sentences = evidence_clean.replace('！', '。').replace('？', '。').split('。')
+        # New logic: Highlight only at specific character ranges
+        # Sort ranges by start position (descending) to avoid position shifts
+        sorted_ranges = sorted(char_ranges, key=lambda x: x[0], reverse=True)
 
-    sentences_to_highlight = []
+        highlighted_text = source_text
+        for start_pos, end_pos in sorted_ranges:
+            # Convert to 0-based indexing
+            start_idx = start_pos - 1
+            end_idx = end_pos  # end_pos is already inclusive in 1-based, so end_idx in 0-based
 
-    for sentence in sentences:
-        sentence = sentence.strip()
-        # Only highlight sentences that are substantial and exist in source
-        if len(sentence) >= 10 and sentence in source_text:
-            sentences_to_highlight.append(sentence)
+            # Ensure indices are valid
+            if 0 <= start_idx < len(source_text) and start_idx < end_idx <= len(source_text):
+                text_to_highlight = source_text[start_idx:end_idx]
+                highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{text_to_highlight}</span>'
 
-    # Highlight all matching sentences individually
-    for sentence in sentences_to_highlight:
-        highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{sentence}</span>'
-        # Use a unique marker to avoid double-replacement
-        highlighted_text = highlighted_text.replace(sentence, f'__HIGHLIGHT_MARKER_{sentences_to_highlight.index(sentence)}__', 1)
+                # Replace only this specific range
+                highlighted_text = (
+                    highlighted_text[:start_idx] +
+                    highlight_span +
+                    highlighted_text[end_idx:]
+                )
 
-    # Replace markers with actual highlights
-    for idx, sentence in enumerate(sentences_to_highlight):
-        highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{sentence}</span>'
-        highlighted_text = highlighted_text.replace(f'__HIGHLIGHT_MARKER_{idx}__', highlight_span)
-    
     html_content = f"""
-    <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; 
+    <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px;
                 font-family: 'Hiragino Sans', sans-serif; line-height: 1.8; border: 1px solid #e0e0e0;">
         {highlighted_text}
     </div>
@@ -347,30 +373,47 @@ def display_results():
     # Compute adjusted range based on evidence text for consistency
     eff_start, eff_end = compute_effective_range(source_doc, start_char, end_char, display_evidence)
 
-    # Show highlighted version with RAG evidence
+    # Detect document prefix (e.g., "文档1: ", "文档2: ") and calculate offset
+    import re
+    doc_prefix_match = re.match(r'^文档\d+:\s*', source_doc)
+    prefix_offset = len(doc_prefix_match.group(0)) if doc_prefix_match else 0
+
+    # Extract the actual document content (without prefix) for display
+    display_source_doc = source_doc[prefix_offset:] if prefix_offset > 0 else source_doc
+
+    # Calculate character ranges for each extracted sentence separately
+    # display_evidence contains the fine-grained extraction (e.g. 2 sentences separated by newline)
+    sentence_ranges = []
+    char_position_ranges = []  # Store tuples for highlighting: [(start1, end1), (start2, end2), ...]
+
+    if display_evidence and display_evidence != '根拠情報なし':
+        # Split by newlines to get individual sentences
+        sentences = [s.strip() for s in display_evidence.split('\n') if s.strip()]
+
+        for sentence in sentences:
+            # Search in the display document (without prefix)
+            if sentence in display_source_doc:
+                # Position in the display document (1-indexed)
+                start_pos_display = display_source_doc.index(sentence) + 1
+                end_pos_display = start_pos_display + len(sentence) - 1
+                sentence_ranges.append(f"{start_pos_display}文字目～{end_pos_display}文字目")
+
+                # For highlighting in the original source_doc (with prefix), add offset
+                start_pos_orig = start_pos_display + prefix_offset
+                end_pos_orig = end_pos_display + prefix_offset
+                char_position_ranges.append((start_pos_orig, end_pos_orig))
+
+    # Show highlighted version with RAG evidence (pass char_position_ranges)
     st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
-    highlighted_html = highlight_rag_evidence_in_source(source_doc, display_evidence)
+    highlighted_html = highlight_rag_evidence_in_source(source_doc, display_evidence, char_position_ranges)
     st.markdown(highlighted_html, unsafe_allow_html=True)
-    
+
     st.markdown(t("**📄 元の文書:**", "**📄 Original document:**"))
 
     st.text_area(t("文書内容", "Document"), source_doc, height=200, key="source_display")
 
     # Evidence information - use display_evidence (extracted evidence, not full chunk)
     evidence_text = result.get('evidence_text', '根拠情報なし')
-
-    # Calculate character ranges for each extracted sentence separately
-    # display_evidence contains the fine-grained extraction (e.g. 2 sentences separated by newline)
-    sentence_ranges = []
-    if display_evidence and display_evidence != '根拠情報なし':
-        # Split by newlines to get individual sentences
-        sentences = [s.strip() for s in display_evidence.split('\n') if s.strip()]
-
-        for sentence in sentences:
-            if sentence in source_doc:
-                start_pos = source_doc.index(sentence) + 1  # 1-indexed
-                end_pos = start_pos + len(sentence) - 1
-                sentence_ranges.append(f"{start_pos}文字目～{end_pos}文字目")
 
     # Display all sentence ranges
     if sentence_ranges:
