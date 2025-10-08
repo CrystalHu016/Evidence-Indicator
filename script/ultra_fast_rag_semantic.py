@@ -609,65 +609,109 @@ class PureSemanticRAG:
             print("\n🔍 Starting evidence extraction from each chunk...")
 
             for i, chunk in enumerate(semantic_chunks, 1):
-                # Extract evidence from each chunk individually
-                evidence_extraction_prompt = f"""
+                # Patent-compliant evidence extraction: LLM outputs character ranges first
+                evidence_range_prompt = f"""
                 ユーザーの質問: {query}
 
                 生成された回答: {answer}
 
                 文書内容: {chunk.content}
 
-                タスク：上記の文書から「生成された回答」を**直接サポートする文のみ**を抽出してください。
+                タスク：上記の文書内容から「生成された回答」の根拠となる文字列範囲を、M文字目～N文字目という形式で提示してください。
 
-                重要な抽出基準：
-                1. **生成された回答に含まれる情報と意味的に一致する原文の文を抽出する**（措辞が完全に一致しなくても、意味が同じであれば抽出する）
-                2. 回答に含まれていない情報（背景説明、例示、詳細な分類など）は除外する
-                3. 抽出した文は元の文書から一字一句そのまま引用する（改変しない）
-                4. 複数の文を抽出する場合は、各文を改行で区切って出力する（一行に一文）
-                5. 文書に回答をサポートする文がない場合は「空」と出力
+                重要な指示：
+                1. 「生成された回答」の内容を注意深く確認し、その回答に含まれる情報のみをサポートする文字列範囲を指定してください
+                2. 「生成された回答」に記載されていない情報（例：回答に構造の説明がないのに構造の文を抽出する）は絶対に抽出しないでください
+                3. 生成された回答に複数の情報が含まれる場合は、それぞれに対応する文の範囲を全て抽出してください
+                4. 複数の範囲がある場合は、カンマで区切って出力してください（例：1文字目～39文字目、40文字目～73文字目）
+                5. 根拠となる文字列がない場合は「空」と出力してください
+                6. 文字のカウントは1文字目から開始します
 
-                注意：回答の措辞と原文の措辞が少し異なっていても、意味的に同じ内容を述べている場合は抽出対象となります。
+                出力例1：
+                質問：Ｂ社は何を売っていますか
+                生成された回答：Cを売っています
+                文書：Ａ社はＢを売り、Ｂ社はＣを売り、今年の売り上げはＡ社が勝った
+                正しい出力：9文字目～15文字目
 
-                抽出例1：
-                質問：コンバインとは何かとその構造を説明してください
-                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は...（詳細説明）...自立型は...（詳細説明）...コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
-                正しい抽出（回答に含まれる2文のみ）：
-                コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
-                コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
-
-                抽出例2：
-                質問：コンバインとは何ですか
+                出力例2：
+                質問：コンバインの定義を教えてください
                 生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は...（詳細説明）...自立型は...（詳細説明）...コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
-                正しい抽出（回答に含まれる1文のみ、種類・構造は回答に含まれないため除外）：
-                コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
+                正しい出力：1文字目～39文字目
 
-                抽出例3：
+                出力例3：
+                質問：コンバインとは何ですか
+                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
+                正しい出力：1文字目～39文字目、40文字目～73文字目
+
+                出力例4：
                 質問：農業機械の種類について教えてください
-                生成された回答：農業機械の一例としてコンバインがあり、これは穀物の収穫・脱穀・選別を一台で行う自走機能を有した機械です。日本で使われるコンバインは普通型と自立型の2種類に大別されます。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は...（詳細説明）...自立型は...（詳細説明）...コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
-                正しい抽出（回答に含まれる2つの情報に対応する2文、措辞は異なるが意味が一致）：
-                コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
-                日本で使われているコンバインは普通型と自立型の2種類に大別されます。
+                生成された回答：農業機械の一例として、コンバインがあります。コンバインは、一台で穀物の収穫・脱穀・選別を行う自走機能を有し、普通型と自立型の2種類に大別されます。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
+                正しい出力：1文字目～39文字目、40文字目～73文字目
 
-                抽出した根拠テキスト（または「空」）を直接出力してください：
+                出力例5：
+                質問：コンバインとは何かとその構造を説明してください
+                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は主にアメリカやヨーロッパ等大規模農業で使われていて、稲・麦・大豆の他にも小豆・菜種・トウモロコシなどの幅広い作物に対応した汎用性の農業機械です。自立型は収穫時に水分含有率が高い稲の収穫に対応するために開発された日本独自の農業機械です。コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
+                正しい出力：1文字目～39文字目、195文字目～245文字目
+
+                出力例6：
+                質問：コンバインで収穫できる穀物は何ですか？
+                生成された回答：コンバインで収穫できる穀物には、稲・麦・大豆の他に小豆・菜種・トウモロコシなどがあります。
+                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は主にアメリカやヨーロッパ等大規模農業で使われていて、稲・麦・大豆の他にも小豆・菜種・トウモロコシなどの幅広い作物に対応した汎用性の農業機械です。自立型は収穫時に水分含有率が高い稲の収穫に対応するために開発された日本独自の農業機械です。
+                正しい出力：104文字目～127文字目
+
+                根拠となる文字列範囲（M文字目～N文字目、または「空」）を直接出力してください：
                 """
 
                 try:
-                    evidence_response = self.llm.invoke(evidence_extraction_prompt)
-                    extracted_evidence = evidence_response.content.strip()
+                    evidence_response = self.llm.invoke(evidence_range_prompt)
+                    range_output = evidence_response.content.strip()
 
-                    # Determine if evidence is empty
-                    is_empty = (extracted_evidence == "空" or
-                               extracted_evidence == "" or
-                               "不包含" in extracted_evidence or
-                               "没有" in extracted_evidence)
+                    # Patent Process 3: Mechanically extract substring based on LLM-provided ranges
+                    is_empty = (range_output == "空" or range_output == "" or "空" in range_output)
+
+                    extracted_evidence = ""
+                    char_ranges = []
+
+                    if not is_empty:
+                        # Parse character ranges (e.g., "1文字目～39文字目、152文字目～186文字目")
+                        import re
+                        range_pattern = r'(\d+)文字目～(\d+)文字目'
+                        matches = re.findall(range_pattern, range_output)
+
+                        if matches:
+                            extracted_parts = []
+                            for start_str, end_str in matches:
+                                start = int(start_str)
+                                end = int(end_str)
+
+                                # Validate range
+                                if 1 <= start <= len(chunk.content) and start <= end <= len(chunk.content):
+                                    # Mechanical extraction (1-based to 0-based indexing)
+                                    substring = chunk.content[start-1:end]
+
+                                    # Use LLM-provided range as-is
+                                    extracted_parts.append(substring)
+                                    char_ranges.append((start, end))
+                                else:
+                                    print(f"   ⚠️ Invalid range: {start}～{end} (chunk length: {len(chunk.content)})")
+
+                            if extracted_parts:
+                                extracted_evidence = "\n".join(extracted_parts)
+                            else:
+                                is_empty = True
+                        else:
+                            print(f"   ⚠️ Could not parse ranges from: {range_output}")
+                            is_empty = True
 
                     evidence_info = {
                         'chunk_id': i,
                         'chunk_content': chunk.content,
                         'extracted_evidence': "" if is_empty else extracted_evidence,
+                        'char_ranges': char_ranges,  # Store the ranges for frontend
                         'similarity_score': float(chunk.similarity_score),
                         'semantic_relevance': float(chunk.semantic_relevance),
                         'is_empty': is_empty
@@ -677,7 +721,10 @@ class PureSemanticRAG:
 
                     status = "✅" if not is_empty else "❌"
                     print(f"{status} Chunk {i} (similarity: {chunk.similarity_score:.3f})")
-                    print(f"   📝 Extracted evidence: {extracted_evidence[:200]}...")
+                    print(f"   📝 LLM range output: {range_output}")
+                    if not is_empty:
+                        print(f"   📍 Parsed ranges: {char_ranges}")
+                        print(f"   📝 Extracted evidence: {extracted_evidence[:200]}...")
                     print(f"   📄 Original chunk length: {len(chunk.content)} chars")
 
                     # Write to debug file
@@ -687,7 +734,9 @@ class PureSemanticRAG:
                         f.write(f"Generated Answer: {answer}\n")
                         f.write(f"Chunk {i} - Similarity: {chunk.similarity_score:.3f}\n")
                         f.write(f"Original chunk ({len(chunk.content)} chars):\n{chunk.content}\n")
-                        f.write(f"\nExtracted evidence ({len(extracted_evidence)} chars):\n{extracted_evidence}\n")
+                        f.write(f"\nLLM range output: {range_output}\n")
+                        f.write(f"Parsed ranges: {char_ranges}\n")
+                        f.write(f"Extracted evidence ({len(extracted_evidence)} chars):\n{extracted_evidence}\n")
                         f.write(f"Is empty: {is_empty}\n")
                         f.write(f"{'='*80}\n")
 

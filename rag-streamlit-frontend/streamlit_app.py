@@ -62,7 +62,8 @@ SAMPLE_QUERIES = {
     "Agriculture (農業)": [
         "コンバインとは何ですか",
         "農業機械の種類について教えてください",
-        "コンバインとは何かとその構造を説明してください"
+        "コンバインとは何かとその構造を説明してください",
+        "コンバインで収穫できる穀物は何ですか？"
     ],
     "Language (言語学)": [
         "音位転倒について説明してください"
@@ -381,12 +382,22 @@ def display_results():
     # Extract the actual document content (without prefix) for display
     display_source_doc = source_doc[prefix_offset:] if prefix_offset > 0 else source_doc
 
-    # Calculate character ranges for each extracted sentence separately
-    # display_evidence contains the fine-grained extraction (e.g. 2 sentences separated by newline)
+    # Patent-compliant: Use LLM-provided character ranges directly (no calculation)
     sentence_ranges = []
     char_position_ranges = []  # Store tuples for highlighting: [(start1, end1), (start2, end2), ...]
 
-    if display_evidence and display_evidence != '根拠情報なし':
+    # Priority 1: Use char_ranges from backend (LLM-provided ranges)
+    if valid_evidences:
+        for evidence in valid_evidences:
+            backend_char_ranges = evidence.get('char_ranges', [])
+            if backend_char_ranges:
+                for start, end in backend_char_ranges:
+                    # Ranges are relative to chunk content, add prefix offset for highlighting
+                    sentence_ranges.append(f"{start}文字目～{end}文字目")
+                    char_position_ranges.append((start + prefix_offset, end + prefix_offset))
+
+    # Fallback: Calculate ranges if backend didn't provide them (for backward compatibility)
+    if not char_position_ranges and display_evidence and display_evidence != '根拠情報なし':
         # Split by newlines to get individual sentences
         sentences = [s.strip() for s in display_evidence.split('\n') if s.strip()]
 
