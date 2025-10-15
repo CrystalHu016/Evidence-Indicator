@@ -57,27 +57,44 @@ class AppConfig:
     PAGE_TITLE = "根拠提示装置 | Evidence Indicator RAG System"
     PAGE_ICON = "🔍"
 
-# Sample queries for different categories
+# Sample queries extracted directly from SQuAD dataset
 SAMPLE_QUERIES = {
-    "Agriculture (農業)": [
-        "コンバインとは何ですか",
-        "農業機械の種類について教えてください",
-        "コンバインとは何かとその構造を説明してください",
-        "コンバインで収穫できる穀物は何ですか？"
+    "梅雨の基本情報": [
+        "梅雨とは何季の一種か?",
+        "初夏に入った5月ごろ、北上する気流は何か？",
+        "初夏に入った5月ごろ北上し、チベット高原に差し掛かる気流は?",
+        "初夏に入った5月ごろに、チベット高原に差し掛かり、高原を境に二手に分かれる気流は何気流？",
     ],
-    "Language (言語学)": [
-        "音位転倒について説明してください"
+    "梅雨の形成過程": [
+        "シベリアから中国大陸にかけての広範囲を冷たく乾燥させる気団は？7",
+        "冬の間、シベリア気団が覆っている範囲はどこか？",
+        "冬の間、シベリアから中国大陸にかけての広範囲を覆うものは何気団か",
+        "冬の間、シベリアから中国大陸にかけての広範囲を覆う冷たく乾燥した気団は?",
     ],
-    "Technology (技術)": [
-        "AI技術の最新動向",
-        "機械学習の応用例",
-        "自然言語処理の手法について"
+    "梅雨の地域性": [
+        "日本で梅雨がないのは北海道とどこか。",
+        "どこ付近で寒帯ジェット気流と合流するか",
+        "日本の地域で本格的な長雨に突入しない場所はどこか。",
+        "東北地方が梅雨入りするのはいつ",
     ],
-    "General (一般)": [
-        "What is artificial intelligence?",
-        "How does machine learning work?",
-        "Explain deep learning concepts"
-    ]
+    "梅雨の用語": [
+        "入梅は何の目安の時期か？",
+        "梅雨明けの別名を何というか。",
+        "太平洋中部の洋上でも高気圧が勢力を増し、範囲を西に広げてくる。この高気圧は北太平洋を帯状に覆う太平洋高気圧の西端を何というか",
+        "梅雨のような時期は秋にもあるが、これを何というか。",
+    ],
+    "梅雨の期間・時期": [
+        "梅雨がみられるのはどの期間？",
+        "亜熱帯ジェット気流が北上し、チベット高原に差し掛かるのはいつか？",
+        "亜熱帯ジェット気流が北上するのはいつか",
+        "梅雨の期間はふつうどのくらいの長さ？",
+    ],
+    "梅雨の気象現象": [
+        "梅雨は、世界的にどのあたりで見られる気象ですか？",
+        "立秋を境にして、立秋以降の長雨のことを何雨と呼ぶか",
+        "気象学では一般的に、梅雨がある中国沿海部・朝鮮半島・日本列島の大部分を何に含めるか",
+        "梅雨の末期は太平洋高気圧の勢力が強くなって等圧線の間隔が込むことで高気圧のへりを回る「辺縁流」が強化され、暖湿流が入りやすくなるため何が起きやすいか",
+    ],
 }
 
 # =============================================================================
@@ -299,26 +316,52 @@ def highlight_rag_evidence_in_source(source_text: str, evidence_text: str, char_
                 highlighted_text = highlighted_text.replace(f'__HIGHLIGHT_MARKER_{idx}__', highlight_span)
     else:
         # New logic: Highlight only at specific character ranges
-        # Sort ranges by start position (descending) to avoid position shifts
-        sorted_ranges = sorted(char_ranges, key=lambda x: x[0], reverse=True)
+        # Use HTML escaping and build segments to avoid nested replacements
+        import html
 
-        highlighted_text = source_text
+        # Merge overlapping ranges and sort by start position
+        merged_ranges = []
+        sorted_ranges = sorted(char_ranges, key=lambda x: x[0])
+
         for start_pos, end_pos in sorted_ranges:
             # Convert to 0-based indexing
             start_idx = start_pos - 1
-            end_idx = end_pos  # end_pos is already inclusive in 1-based, so end_idx in 0-based
+            end_idx = end_pos  # end_pos is already inclusive
 
-            # Ensure indices are valid
-            if 0 <= start_idx < len(source_text) and start_idx < end_idx <= len(source_text):
+            # Validate range
+            if not (0 <= start_idx < len(source_text) and start_idx < end_idx <= len(source_text)):
+                continue
+
+            # Merge with previous range if overlapping
+            if merged_ranges and start_idx <= merged_ranges[-1][1]:
+                merged_ranges[-1] = (merged_ranges[-1][0], max(merged_ranges[-1][1], end_idx))
+            else:
+                merged_ranges.append((start_idx, end_idx))
+
+        # Build highlighted text by segments
+        if merged_ranges:
+            segments = []
+            last_end = 0
+
+            for start_idx, end_idx in merged_ranges:
+                # Add non-highlighted text before this range
+                if last_end < start_idx:
+                    segments.append(html.escape(source_text[last_end:start_idx]))
+
+                # Add highlighted text
                 text_to_highlight = source_text[start_idx:end_idx]
-                highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{text_to_highlight}</span>'
+                highlight_span = f'<span style="background-color: #ffff00; padding: 2px 4px; border-radius: 3px; font-weight: bold; border: 1px solid #ffcc00;">{html.escape(text_to_highlight)}</span>'
+                segments.append(highlight_span)
 
-                # Replace only this specific range
-                highlighted_text = (
-                    highlighted_text[:start_idx] +
-                    highlight_span +
-                    highlighted_text[end_idx:]
-                )
+                last_end = end_idx
+
+            # Add remaining non-highlighted text
+            if last_end < len(source_text):
+                segments.append(html.escape(source_text[last_end:]))
+
+            highlighted_text = ''.join(segments)
+        else:
+            highlighted_text = html.escape(source_text)
 
     html_content = f"""
     <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px;
@@ -357,12 +400,27 @@ def display_results():
     start_char = result.get('start_char', 0)
     end_char = result.get('end_char', 0)
     evidence_text = result.get('evidence_text', '')
+    
+    # Extract only the context part (remove "文脈: " prefix and Q&A parts)
+    context_only_text = source_doc
+    if "文脈: " in source_doc:
+        # Extract only the context part before "質問:"
+        context_start = source_doc.find("文脈: ") + 3  # Skip "文脈: "
+        question_start = source_doc.find("\n\n質問:")
+        if question_start > context_start:
+            context_only_text = source_doc[context_start:question_start].strip()
+        else:
+            # If no question found, take everything after "文脈: "
+            context_only_text = source_doc[context_start:].strip()
+
+    # Use context-only text for display
+    display_source_doc = context_only_text
 
     # Get extracted evidences (Strategy 3)
     evidences = result.get('evidences', [])
     valid_evidences = [e for e in evidences if not e.get('is_empty', True)]
 
-    # Use extracted evidence for highlighting (more precise than whole chunk)
+    # Use RAG extracted evidence for highlighting (to analyze RAG's selection)
     if valid_evidences:
         # Combine all extracted evidences for highlighting
         extracted_texts = [e.get('extracted_evidence', '') for e in valid_evidences]
@@ -370,31 +428,54 @@ def display_results():
         display_evidence = combined_extracted
     else:
         display_evidence = evidence_text
+    
+    # Extract original dataset answer for comparison (but don't use for highlighting)
+    original_answer = ""
+    if "回答: " in source_doc:
+        answer_start = source_doc.find("回答: ") + 3  # Skip "回答: "
+        answer_end = source_doc.find("\n", answer_start)
+        if answer_end == -1:
+            answer_end = len(source_doc)
+        original_answer = source_doc[answer_start:answer_end].strip()
 
     # Compute adjusted range based on evidence text for consistency
     eff_start, eff_end = compute_effective_range(source_doc, start_char, end_char, display_evidence)
-
-    # Detect document prefix (e.g., "文档1: ", "文档2: ") and calculate offset
-    import re
-    doc_prefix_match = re.match(r'^文档\d+:\s*', source_doc)
-    prefix_offset = len(doc_prefix_match.group(0)) if doc_prefix_match else 0
-
-    # Extract the actual document content (without prefix) for display
-    display_source_doc = source_doc[prefix_offset:] if prefix_offset > 0 else source_doc
 
     # Patent-compliant: Use LLM-provided character ranges directly (no calculation)
     sentence_ranges = []
     char_position_ranges = []  # Store tuples for highlighting: [(start1, end1), (start2, end2), ...]
 
-    # Priority 1: Use char_ranges from backend (LLM-provided ranges)
+    # Priority 1: Use char_ranges from backend (LLM-provided ranges) to analyze RAG's selection
     if valid_evidences:
         for evidence in valid_evidences:
             backend_char_ranges = evidence.get('char_ranges', [])
-            if backend_char_ranges:
+            chunk_content = evidence.get('chunk_content', '')
+
+            if backend_char_ranges and chunk_content:
+                # char_ranges are relative to chunk_content
+                # We need to map them to display_source_doc positions
                 for start, end in backend_char_ranges:
-                    # Ranges are relative to chunk content, add prefix offset for highlighting
-                    sentence_ranges.append(f"{start}文字目～{end}文字目")
-                    char_position_ranges.append((start + prefix_offset, end + prefix_offset))
+                    # Extract the actual text from chunk using the range (1-based indexing)
+                    if 1 <= start <= len(chunk_content) and start < end <= len(chunk_content):
+                        evidence_substring = chunk_content[start-1:end]
+
+                        # Find this substring in display_source_doc
+                        if evidence_substring in display_source_doc:
+                            substring_pos = display_source_doc.find(evidence_substring)
+                            if substring_pos >= 0:
+                                # Calculate position in display_source_doc (1-based)
+                                context_start_pos = substring_pos + 1
+                                context_end_pos = substring_pos + len(evidence_substring)
+
+                                sentence_ranges.append(f"{context_start_pos}文字目～{context_end_pos}文字目")
+                                char_position_ranges.append((context_start_pos, context_end_pos))
+                            else:
+                                # Substring not found in display, skip this range
+                                print(f"⚠️ Evidence substring not found in display: {evidence_substring[:50]}...")
+                        else:
+                            print(f"⚠️ Evidence substring not in display: {evidence_substring[:50]}...")
+                    else:
+                        print(f"⚠️ Invalid char_range: {start}～{end} for chunk length {len(chunk_content)}")
 
     # Fallback: Calculate ranges if backend didn't provide them (for backward compatibility)
     if not char_position_ranges and display_evidence and display_evidence != '根拠情報なし':
@@ -416,12 +497,68 @@ def display_results():
 
     # Show highlighted version with RAG evidence (pass char_position_ranges)
     st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
-    highlighted_html = highlight_rag_evidence_in_source(source_doc, display_evidence, char_position_ranges)
+    highlighted_html = highlight_rag_evidence_in_source(display_source_doc, display_evidence, char_position_ranges)
     st.markdown(highlighted_html, unsafe_allow_html=True)
 
     st.markdown(t("**📄 元の文書:**", "**📄 Original document:**"))
 
-    st.text_area(t("文書内容", "Document"), source_doc, height=200, key="source_display")
+    st.text_area(t("文書内容", "Document"), display_source_doc, height=200, key="source_display")
+    
+    # Extract original dataset answer and position from source document
+    original_answer = ""
+    original_answer_ranges = []
+
+    if "回答: " in source_doc:
+        answer_start = source_doc.find("回答: ") + 3  # Skip "回答: "
+        answer_end = source_doc.find("\n", answer_start)
+        if answer_end == -1:
+            answer_end = len(source_doc)
+        original_answer = source_doc[answer_start:answer_end].strip()
+
+    # Try to load ground truth answer positions from JSQuAD dataset
+    try:
+        import json
+        import os
+        dataset_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                     "data", "jsquad_validation_100.json")
+
+        if os.path.exists(dataset_path):
+            with open(dataset_path, 'r', encoding='utf-8') as f:
+                dataset = json.load(f)
+
+            # Find matching question in dataset
+            for item in dataset:
+                if item['question'] == query:
+                    # Get answer positions (character start positions in 1-based indexing)
+                    answer_starts = item['answers']['answer_start']
+                    answer_texts = item['answers']['text']
+
+                    # Convert to ranges (start to end positions)
+                    for i, start_pos in enumerate(answer_starts):
+                        if i < len(answer_texts):
+                            answer_text = answer_texts[i]
+                            end_pos = start_pos + len(answer_text)
+                            # Convert to 1-based display format (add 1 to start_pos since dataset is 0-based)
+                            original_answer_ranges.append(f"{start_pos + 1}文字目～{end_pos}文字目")
+
+                    # Use the first ground truth answer if not already found
+                    if not original_answer and answer_texts:
+                        original_answer = answer_texts[0]
+
+                    break
+    except Exception as e:
+        print(f"⚠️ Could not load ground truth positions: {e}")
+
+    # Display original dataset answer
+    if original_answer:
+        st.markdown(t("**📋 元のデータセット回答:**", "**📋 Original dataset answer:**"))
+        st.info(original_answer)
+
+        # Display ground truth answer ranges
+        if original_answer_ranges:
+            gt_ranges_text = "、".join(original_answer_ranges)
+            st.markdown(t(f"**📍 元データセット答案范围:** {gt_ranges_text}",
+                         f"**📍 Ground truth answer ranges:** {gt_ranges_text}"))
 
     # Evidence information - use display_evidence (extracted evidence, not full chunk)
     evidence_text = result.get('evidence_text', '根拠情報なし')

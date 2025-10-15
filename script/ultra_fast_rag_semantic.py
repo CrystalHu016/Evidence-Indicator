@@ -199,10 +199,10 @@ class PureSemanticRAG:
         # Semantic ranking system
         self.semantic_ranker = SemanticLLMRanker(openai_api_key)
 
-        # Configuration - Performance optimization: reduce candidate count for speed
+        # Configuration - Balanced for accuracy and recall
         self.config = {
             'similarity_threshold': 0.2,
-            'max_candidates': 3,  # Reduced from 8 to 3, expect 50% speedup
+            'max_candidates': 8,  # Increased to 8 for better recall (find more candidate chunks)
             'use_query_expansion': True,  # Keep query expansion to ensure recall
             'use_semantic_ranking': True
         }
@@ -252,24 +252,59 @@ class PureSemanticRAG:
                 data = json.load(f)
             print(f"✅ Loaded {len(data)} data entries")
 
-            # Convert to Document format
-            documents = []
+            # Deduplicate contexts - SQuAD format has duplicate contexts for multiple questions
+            print("🔄 Deduplicating contexts (SQuAD format has multiple Q&A pairs per context)...")
+            seen_contexts = {}
             for item in data:
-                content = item.get('output', '') or item.get('text', '') or item.get('content', '')
-                if content:
-                    doc = Document(
-                        page_content=content,
-                        metadata={
-                            'source': 'semantic_rag',
-                            'original_index': len(documents),
-                            'original_full_text': content  # Save complete original text
-                        }
-                    )
-                    documents.append(doc)
+                content = item.get('context', '') or item.get('output', '') or item.get('text', '') or item.get('content', '')
+                if not content:
+                    continue
+
+                # Use content as key for deduplication
+                if content not in seen_contexts:
+                    # Extract paragraph ID from ID field (e.g., "a10336p0q0" -> "a10336p0")
+                    item_id = item.get('id', '')
+                    # Extract paragraph identifier (everything before the last 'q')
+                    if 'q' in item_id:
+                        para_id = item_id.rsplit('q', 1)[0]  # e.g., "a10336p0q0" -> "a10336p0"
+                    else:
+                        para_id = item_id
+
+                    title = item.get('title', 'unknown')
+
+                    seen_contexts[content] = {
+                        'content': content,
+                        'para_id': para_id,
+                        'title': title,
+                        'item_ids': [item_id]
+                    }
+                else:
+                    # Track all item IDs that use this context
+                    item_id = item.get('id', '')
+                    seen_contexts[content]['item_ids'].append(item_id)
+
+            print(f"  📊 Deduplicated: {len(data)} entries -> {len(seen_contexts)} unique contexts")
+
+            # Convert to Document format with enhanced metadata for multi-paragraph linking
+            documents = []
+            for idx, (content, info) in enumerate(seen_contexts.items()):
+                doc = Document(
+                    page_content=content,
+                    metadata={
+                        'source': 'semantic_rag',
+                        'original_index': idx,
+                        'original_full_text': content,  # Save complete original text
+                        'doc_id': info['para_id'],  # Use paragraph ID
+                        'title': info['title'],  # Document title for grouping
+                        'is_full_context': True,  # Mark as full context before chunking
+                        'related_item_ids': ','.join(info['item_ids'])  # Join list as string for ChromaDB compatibility
+                    }
+                )
+                documents.append(doc)
 
             print(f"📄 Converted {len(documents)} documents")
 
-            # Text splitting
+            # Text splitting with enhanced metadata preservation
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
@@ -279,12 +314,31 @@ class PureSemanticRAG:
 
             chunks = text_splitter.split_documents(documents)
 
-            # Post-process: clean up chunks that start with punctuation
-            for chunk in chunks:
+            # Post-process: clean up and add chunk relationship metadata
+            for chunk_idx, chunk in enumerate(chunks):
                 # Remove leading punctuation (。！？、etc)
                 chunk.page_content = chunk.page_content.lstrip('。！？、 \n')
 
-            print(f"📄 Created {len(chunks)} chunks (cleaned)")
+                # Add chunk relationship metadata
+                original_meta = chunk.metadata
+                chunk.metadata.update({
+                    'chunk_id': chunk_idx,  # Unique chunk ID
+                    'chunk_position': chunk_idx,  # Position in chunk sequence
+                    'parent_doc_id': original_meta.get('doc_id', f"doc_{original_meta.get('original_index', 0)}"),
+                    'parent_title': original_meta.get('title', 'unknown'),
+                    'is_chunk': True,  # Mark as chunk (vs full context)
+                    'char_start': 0,  # Character position in original document (to be calculated)
+                    'char_end': len(chunk.page_content)
+                })
+
+                # Calculate character position in original document
+                original_full = original_meta.get('original_full_text', '')
+                if original_full and chunk.page_content in original_full:
+                    char_start = original_full.find(chunk.page_content)
+                    chunk.metadata['char_start'] = char_start
+                    chunk.metadata['char_end'] = char_start + len(chunk.page_content)
+
+            print(f"📄 Created {len(chunks)} chunks with relationship metadata (cleaned)")
 
             # Clean up old vector store
             if os.path.exists(self.chroma_path):
@@ -341,13 +395,16 @@ class PureSemanticRAG:
         unique_candidates = self._deduplicate_candidates(all_candidates)
         print(f"🎯 Candidates after deduplication: {len(unique_candidates)}")
 
-        # 4. Semantic evaluation
-        if self.config['use_semantic_ranking']:
-            semantic_chunks = self._evaluate_semantic_relevance(query, unique_candidates)
-        else:
-            semantic_chunks = self._convert_to_semantic_chunks(unique_candidates)
+        # 4. Combine related chunks from same parent document
+        combined_candidates = self._combine_related_chunks(unique_candidates)
 
-        # 5. Sort and return
+        # 5. Semantic evaluation
+        if self.config['use_semantic_ranking']:
+            semantic_chunks = self._evaluate_semantic_relevance(query, combined_candidates)
+        else:
+            semantic_chunks = self._convert_to_semantic_chunks(combined_candidates)
+
+        # 6. Sort and return
         semantic_chunks.sort(key=lambda x: x.final_score, reverse=True)
         return semantic_chunks[:k]
     
@@ -447,6 +504,98 @@ class PureSemanticRAG:
                 unique_candidates.append(candidate)
 
         return unique_candidates
+
+    def _combine_related_chunks(self, candidates: List[Dict]) -> List[Dict]:
+        """
+        Combine chunks from the same parent document to restore full context.
+        This solves the multi-paragraph retrieval problem where answer spans multiple chunks.
+        """
+        print("\n🔗 Combining related chunks from same documents...")
+
+        # Group candidates by parent document
+        doc_groups = {}
+        for candidate in candidates:
+            doc = candidate['document']
+            parent_doc_id = doc.metadata.get('parent_doc_id', 'unknown')
+
+            if parent_doc_id not in doc_groups:
+                doc_groups[parent_doc_id] = {
+                    'chunks': [],
+                    'parent_title': doc.metadata.get('parent_title', 'unknown'),
+                    'original_full_text': doc.metadata.get('original_full_text', ''),
+                    'max_similarity': 0.0
+                }
+
+            doc_groups[parent_doc_id]['chunks'].append(candidate)
+            # Track highest similarity score among chunks
+            doc_groups[parent_doc_id]['max_similarity'] = max(
+                doc_groups[parent_doc_id]['max_similarity'],
+                candidate['similarity_score']
+            )
+
+        print(f"  📊 Found {len(candidates)} chunks from {len(doc_groups)} parent documents")
+
+        # Combine chunks for each document
+        combined_candidates = []
+        for parent_doc_id, group in doc_groups.items():
+            chunks = group['chunks']
+
+            if len(chunks) == 1:
+                # Single chunk - use as-is
+                combined_candidates.append(chunks[0])
+                print(f"  📄 {parent_doc_id}: 1 chunk, kept as-is")
+            else:
+                # Multiple chunks from same document - combine them
+                print(f"  🔗 {parent_doc_id}: {len(chunks)} chunks, combining...")
+
+                # Sort chunks by character position
+                chunks_sorted = sorted(
+                    chunks,
+                    key=lambda c: c['document'].metadata.get('char_start', 0)
+                )
+
+                # Use the original full text if available
+                original_full = group['original_full_text']
+                if original_full:
+                    # Use complete original document
+                    combined_content = original_full
+                    print(f"    ✅ Using original full context ({len(combined_content)} chars)")
+                else:
+                    # Fallback: concatenate chunks in order
+                    combined_content = '\n'.join([c['document'].page_content for c in chunks_sorted])
+                    print(f"    ⚠️ Concatenated {len(chunks)} chunks ({len(combined_content)} chars)")
+
+                # Create combined document with averaged scores
+                avg_similarity = sum(c['similarity_score'] for c in chunks) / len(chunks)
+
+                # Use metadata from first chunk but mark as combined
+                first_chunk = chunks_sorted[0]
+                combined_metadata = first_chunk['document'].metadata.copy()
+                combined_metadata.update({
+                    'is_combined': True,
+                    'num_chunks_combined': len(chunks),
+                    'combined_chunk_ids': ','.join(str(c['document'].metadata.get('chunk_id', -1)) for c in chunks),  # Join as string for ChromaDB
+                    'char_start': 0,
+                    'char_end': len(combined_content)
+                })
+
+                combined_doc = Document(
+                    page_content=combined_content,
+                    metadata=combined_metadata
+                )
+
+                combined_candidate = {
+                    'document': combined_doc,
+                    'similarity_score': group['max_similarity'],  # Use max score for ranking
+                    'avg_similarity_score': avg_similarity,
+                    'source_query': first_chunk.get('source_query', ''),
+                    'is_combined': True
+                }
+
+                combined_candidates.append(combined_candidate)
+
+        print(f"  ✅ Combined into {len(combined_candidates)} documents\n")
+        return combined_candidates
 
     def _evaluate_semantic_relevance(self, query: str, candidates: List[Dict]) -> List[SemanticChunk]:
         """LLM semantic relevance evaluation"""
@@ -610,147 +759,214 @@ class PureSemanticRAG:
 
             for i, chunk in enumerate(semantic_chunks, 1):
                 # Patent-compliant evidence extraction: LLM outputs character ranges first
-                evidence_range_prompt = f"""
-                ユーザーの質問: {query}
+                # Strategy 1: Direct substring matching (most reliable for exact matches)
+                # Extract key phrases from the answer that should appear in evidence
+                import re
 
-                生成された回答: {answer}
+                # Split answer into key phrases (by punctuation) and also extract key n-grams
+                answer_phrases = []
 
-                文書内容: {chunk.content}
+                # Method 1: Split by punctuation
+                phrases_from_split = [p.strip() for p in re.split(r'[、。，]', answer) if len(p.strip()) > 3]
+                answer_phrases.extend(phrases_from_split)
 
-                タスク：上記の文書内容から「生成された回答」の根拠となる文字列範囲を、M文字目～N文字目という形式で提示してください。
+                # Method 2: Extract key content words (4+ chars)
+                content_phrases = re.findall(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]{4,}', answer)
+                answer_phrases.extend(content_phrases)
 
-                重要な指示：
-                1. 「生成された回答」の内容を注意深く確認し、その回答に含まれる情報のみをサポートする文字列範囲を指定してください
-                2. 「生成された回答」に記載されていない情報（例：回答に構造の説明がないのに構造の文を抽出する）は絶対に抽出しないでください
-                3. 生成された回答に複数の情報が含まれる場合は、それぞれに対応する文の範囲を全て抽出してください
-                4. 複数の範囲がある場合は、カンマで区切って出力してください（例：1文字目～39文字目、40文字目～73文字目）
-                5. 根拠となる文字列がない場合は「空」と出力してください
-                6. 文字のカウントは1文字目から開始します
+                # Method 3: Extract key phrases with common endings (flexible matching)
+                # e.g., "梅雨は雨季の一種であり" -> also try "雨季の一種である", "雨季の一種", etc.
+                flexible_phrases = []
+                for phrase in phrases_from_split:
+                    # Try removing common verb endings
+                    for ending in ['であり', 'です', 'ます', 'ました', 'である']:
+                        if phrase.endswith(ending):
+                            base = phrase[:-len(ending)]
+                            if len(base) >= 4:
+                                flexible_phrases.append(base + 'である')
+                                flexible_phrases.append(base)
 
-                出力例1：
-                質問：Ｂ社は何を売っていますか
-                生成された回答：Cを売っています
-                文書：Ａ社はＢを売り、Ｂ社はＣを売り、今年の売り上げはＡ社が勝った
-                正しい出力：9文字目～15文字目
+                    # Try removing subject prefixes (e.g., "梅雨は" from "梅雨は雨季の一種であり")
+                    # Look for "Xは" pattern and extract the part after "は"
+                    if 'は' in phrase:
+                        parts = phrase.split('は', 1)
+                        if len(parts) == 2 and len(parts[1]) >= 4:
+                            suffix = parts[1]
+                            flexible_phrases.append(suffix)
+                            # Also try with である ending
+                            for ending in ['であり', 'です', 'ます']:
+                                if suffix.endswith(ending):
+                                    base = suffix[:-len(ending)]
+                                    if len(base) >= 4:
+                                        flexible_phrases.append(base + 'である')
+                                        flexible_phrases.append(base)
 
-                出力例2：
-                質問：コンバインの定義を教えてください
-                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
-                正しい出力：1文字目～39文字目
+                answer_phrases.extend(flexible_phrases)
 
-                出力例3：
-                質問：コンバインとは何ですか
-                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
-                正しい出力：1文字目～39文字目、40文字目～73文字目
+                # Remove duplicates while preserving order
+                seen = set()
+                answer_phrases = [p for p in answer_phrases if p not in seen and not seen.add(p)]
 
-                出力例4：
-                質問：農業機械の種類について教えてください
-                生成された回答：農業機械の一例として、コンバインがあります。コンバインは、一台で穀物の収穫・脱穀・選別を行う自走機能を有し、普通型と自立型の2種類に大別されます。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。
-                正しい出力：1文字目～39文字目、40文字目～73文字目
+                direct_match_ranges = []
+                direct_match_texts = []
 
-                出力例5：
-                質問：コンバインとは何かとその構造を説明してください
-                生成された回答：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は主にアメリカやヨーロッパ等大規模農業で使われていて、稲・麦・大豆の他にも小豆・菜種・トウモロコシなどの幅広い作物に対応した汎用性の農業機械です。自立型は収穫時に水分含有率が高い稲の収穫に対応するために開発された日本独自の農業機械です。コンバインの構造は走行部・刈取部・搬送部・脱穀部・選別部・穀粒処理部・ワラ処理部から構成されています。
-                正しい出力：1文字目～39文字目、195文字目～245文字目
+                for phrase in answer_phrases:
+                    # Look for this phrase (or close variations) in the chunk
+                    if phrase in chunk.content:
+                        phrase_start = chunk.content.find(phrase)
+                        phrase_end = phrase_start + len(phrase)
 
-                出力例6：
-                質問：コンバインで収穫できる穀物は何ですか？
-                生成された回答：コンバインで収穫できる穀物には、稲・麦・大豆の他に小豆・菜種・トウモロコシなどがあります。
-                文書：コンバインは、一台で穀物の収穫・脱穀・選別をする自走機能を有した農業機械です。日本で使われているコンバインは普通型と自立型の2種類に大別されます。普通型は主にアメリカやヨーロッパ等大規模農業で使われていて、稲・麦・大豆の他にも小豆・菜種・トウモロコシなどの幅広い作物に対応した汎用性の農業機械です。自立型は収穫時に水分含有率が高い稲の収穫に対応するために開発された日本独自の農業機械です。
-                正しい出力：104文字目～127文字目
+                        # Avoid duplicate ranges
+                        range_tuple = (phrase_start + 1, phrase_end)
+                        if range_tuple not in direct_match_ranges:
+                            direct_match_ranges.append(range_tuple)  # 1-based
+                            direct_match_texts.append(chunk.content[phrase_start:phrase_end])
+                            print(f"   ✓ Direct match found: '{phrase}' at {phrase_start + 1}～{phrase_end}")
 
-                根拠となる文字列範囲（M文字目～N文字目、または「空」）を直接出力してください：
-                """
+                # Strategy 2: Sentence-level matching for answer keywords
+                answer_keywords = []
+                for sentence in answer.split('。'):
+                    sentence = sentence.strip()
+                    # Extract important terms (kanji-containing words 2+ chars)
+                    words = re.findall(r'[\u4e00-\u9fff]+[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]*', sentence)
+                    answer_keywords.extend([w for w in words if len(w) >= 2])
 
-                try:
-                    evidence_response = self.llm.invoke(evidence_range_prompt)
-                    range_output = evidence_response.content.strip()
+                keyword_match_ranges = []
+                keyword_match_texts = []
 
-                    # Patent Process 3: Mechanically extract substring based on LLM-provided ranges
-                    is_empty = (range_output == "空" or range_output == "" or "空" in range_output)
+                if not direct_match_ranges and answer_keywords:
+                    # Find sentences containing answer keywords
+                    sentences = chunk.content.replace('。', '。\n').split('\n')
+                    for sent in sentences:
+                        sent = sent.strip()
+                        if not sent or sent.startswith('[SEP]'):
+                            continue
 
-                    extracted_evidence = ""
-                    char_ranges = []
+                        # Check if this sentence contains answer keywords
+                        keyword_count = sum(1 for kw in answer_keywords if kw in sent)
+                        if keyword_count >= 1:
+                            # Find position of this sentence in chunk
+                            sent_start = chunk.content.find(sent)
+                            if sent_start >= 0:
+                                sent_end = sent_start + len(sent)
+                                keyword_match_ranges.append((sent_start + 1, sent_end))
+                                keyword_match_texts.append(sent)
+                                print(f"   ✓ Keyword match: sentence with {keyword_count} keywords at {sent_start + 1}～{sent_end}")
+                                if len(keyword_match_ranges) >= 2:  # Limit to 2 sentences
+                                    break
 
-                    if not is_empty:
-                        # Parse character ranges (e.g., "1文字目～39文字目、152文字目～186文字目")
-                        import re
-                        range_pattern = r'(\d+)文字目～(\d+)文字目'
-                        matches = re.findall(range_pattern, range_output)
+                # Strategy 3: LLM-based extraction (as fallback for complex cases)
+                llm_match_ranges = []
+                llm_match_texts = []
 
-                        if matches:
-                            extracted_parts = []
+                if not direct_match_ranges and not keyword_match_ranges:
+                    evidence_range_prompt = f"""
+タスク：文書から回答を支持する根拠となる部分の文字範囲を特定してください。
+
+質問: {query}
+回答: {answer}
+文書: {chunk.content}
+
+指示：
+1. 回答の主張を裏付ける文書内の該当箇所を探してください
+2. タイトル部分（"[SEP]"の前）は避けてください
+3. 複数範囲がある場合はカンマ区切りで出力
+4. 該当なしの場合は「空」と出力
+5. 出力形式: M文字目～N文字目
+
+例：
+- 質問：梅雨とは何季の一種か?
+  回答：梅雨は雨季の一種です。
+  文書：梅雨 [SEP] 梅雨は東アジアで見られる気象現象で、5月から7月にかけて来る曇りや雨の多い期間のこと。雨季の一種である。
+  正しい出力：80文字目～88文字目
+  誤り例：1文字目～10文字目（タイトル部分は不可）
+
+根拠範囲：
+"""
+
+                    try:
+                        evidence_response = self.llm.invoke(evidence_range_prompt)
+                        range_output = evidence_response.content.strip()
+
+                        if range_output != "空" and range_output != "":
+                            # Parse ranges
+                            range_pattern = r'(\d+)文字目～(\d+)文字目'
+                            matches = re.findall(range_pattern, range_output)
+
                             for start_str, end_str in matches:
                                 start = int(start_str)
                                 end = int(end_str)
 
-                                # Validate range
                                 if 1 <= start <= len(chunk.content) and start <= end <= len(chunk.content):
-                                    # Mechanical extraction (1-based to 0-based indexing)
                                     substring = chunk.content[start-1:end]
+                                    llm_match_ranges.append((start, end))
+                                    llm_match_texts.append(substring)
+                                    print(f"   ✓ LLM extraction: {start}～{end}")
+                    except Exception as llm_e:
+                        print(f"   ⚠️ LLM extraction failed: {llm_e}")
 
-                                    # Use LLM-provided range as-is
-                                    extracted_parts.append(substring)
-                                    char_ranges.append((start, end))
-                                else:
-                                    print(f"   ⚠️ Invalid range: {start}～{end} (chunk length: {len(chunk.content)})")
+                # Choose best strategy
+                if direct_match_ranges:
+                    char_ranges = direct_match_ranges
+                    extracted_evidence = "\n".join(direct_match_texts)
+                    is_empty = False
+                    print(f"   ✅ Using direct phrase matching")
+                elif keyword_match_ranges:
+                    char_ranges = keyword_match_ranges
+                    extracted_evidence = "\n".join(keyword_match_texts)
+                    is_empty = False
+                    print(f"   ✅ Using keyword-based sentence matching")
+                elif llm_match_ranges:
+                    char_ranges = llm_match_ranges
+                    extracted_evidence = "\n".join(llm_match_texts)
+                    is_empty = False
+                    print(f"   ✅ Using LLM extraction")
+                else:
+                    char_ranges = []
+                    extracted_evidence = ""
+                    is_empty = True
+                    print(f"   ❌ No evidence found in chunk")
 
-                            if extracted_parts:
-                                extracted_evidence = "\n".join(extracted_parts)
-                            else:
-                                is_empty = True
-                        else:
-                            print(f"   ⚠️ Could not parse ranges from: {range_output}")
-                            is_empty = True
+                # Create evidence info
+                evidence_info = {
+                    'chunk_id': i,
+                    'chunk_content': chunk.content,
+                    'extracted_evidence': "" if is_empty else extracted_evidence,
+                    'char_ranges': char_ranges,  # Store the ranges for frontend
+                    'similarity_score': float(chunk.similarity_score),
+                    'semantic_relevance': float(chunk.semantic_relevance),
+                    'is_empty': is_empty
+                }
 
-                    evidence_info = {
-                        'chunk_id': i,
-                        'chunk_content': chunk.content,
-                        'extracted_evidence': "" if is_empty else extracted_evidence,
-                        'char_ranges': char_ranges,  # Store the ranges for frontend
-                        'similarity_score': float(chunk.similarity_score),
-                        'semantic_relevance': float(chunk.semantic_relevance),
-                        'is_empty': is_empty
-                    }
+                evidences.append(evidence_info)
 
-                    evidences.append(evidence_info)
+                status = "✅" if not is_empty else "❌"
+                print(f"{status} Chunk {i} (similarity: {chunk.similarity_score:.3f})")
+                if not is_empty:
+                    print(f"   📍 Char ranges: {char_ranges}")
+                    print(f"   📝 Extracted evidence: {extracted_evidence[:200]}...")
+                print(f"   📄 Original chunk length: {len(chunk.content)} chars")
 
-                    status = "✅" if not is_empty else "❌"
-                    print(f"{status} Chunk {i} (similarity: {chunk.similarity_score:.3f})")
-                    print(f"   📝 LLM range output: {range_output}")
-                    if not is_empty:
-                        print(f"   📍 Parsed ranges: {char_ranges}")
-                        print(f"   📝 Extracted evidence: {extracted_evidence[:200]}...")
-                    print(f"   📄 Original chunk length: {len(chunk.content)} chars")
-
-                    # Write to debug file
-                    with open('/tmp/rag_evidence_debug.log', 'a', encoding='utf-8') as f:
-                        f.write(f"\n{'='*80}\n")
-                        f.write(f"Query: {query}\n")
-                        f.write(f"Generated Answer: {answer}\n")
-                        f.write(f"Chunk {i} - Similarity: {chunk.similarity_score:.3f}\n")
-                        f.write(f"Original chunk ({len(chunk.content)} chars):\n{chunk.content}\n")
-                        f.write(f"\nLLM range output: {range_output}\n")
-                        f.write(f"Parsed ranges: {char_ranges}\n")
-                        f.write(f"Extracted evidence ({len(extracted_evidence)} chars):\n{extracted_evidence}\n")
-                        f.write(f"Is empty: {is_empty}\n")
-                        f.write(f"{'='*80}\n")
-
-                except Exception as e:
-                    print(f"⚠️ Chunk {i} evidence extraction failed: {e}")
-                    evidences.append({
-                        'chunk_id': i,
-                        'chunk_content': chunk.content,
-                        'extracted_evidence': '',
-                        'similarity_score': float(chunk.similarity_score),
-                        'semantic_relevance': float(chunk.semantic_relevance),
-                        'is_empty': True,
-                        'error': str(e)
-                    })
+                # Write to debug file
+                with open('/tmp/rag_evidence_debug.log', 'a', encoding='utf-8') as f:
+                    f.write(f"\n{'='*80}\n")
+                    f.write(f"Query: {query}\n")
+                    f.write(f"Generated Answer: {answer}\n")
+                    f.write(f"Chunk {i} - Similarity: {chunk.similarity_score:.3f}\n")
+                    f.write(f"Original chunk ({len(chunk.content)} chars):\n{chunk.content}\n")
+                    f.write(f"\nExtraction strategy: ")
+                    if direct_match_ranges:
+                        f.write("Direct phrase matching\n")
+                    elif keyword_match_ranges:
+                        f.write("Keyword-based sentence matching\n")
+                    elif llm_match_ranges:
+                        f.write("LLM extraction\n")
+                    else:
+                        f.write("No match\n")
+                    f.write(f"Char ranges: {char_ranges}\n")
+                    f.write(f"Extracted evidence ({len(extracted_evidence)} chars):\n{extracted_evidence}\n")
+                    f.write(f"Is empty: {is_empty}\n")
+                    f.write(f"{'='*80}\n")
 
             # Find best evidence text (for backward compatibility)
             best_chunk = semantic_chunks[0]
@@ -796,14 +1012,14 @@ class PureSemanticRAG:
                 'evidences': []
             }
     
-    def query_with_answer(self, query: str, k: int = 8, relevance_threshold: float = 0.3) -> Dict[str, Any]:
-        """Complete query workflow - Support partial matching: retrieve more documents (k=8), threshold (0.3) for better recall"""
+    def query_with_answer(self, query: str, k: int = 10, relevance_threshold: float = 0.25) -> Dict[str, Any]:
+        """Complete query workflow - Support partial matching: retrieve more documents (k=10), lower threshold (0.25) for better recall"""
         start_time = time.time()
 
-        # 1. Semantic retrieval - get top k candidate documents (increased to 8 for better recall)
+        # 1. Semantic retrieval - get top k candidate documents (increased to 10 for better recall)
         semantic_chunks = self.semantic_query(query, k)
 
-        # 2. Filter: only keep documents with semantic relevance ≥ threshold (threshold 0.4 allows partial matching)
+        # 2. Filter: only keep documents with semantic relevance ≥ threshold (threshold 0.25 allows more partial matches)
         filtered_chunks = [
             chunk for chunk in semantic_chunks
             if chunk.semantic_relevance >= relevance_threshold
