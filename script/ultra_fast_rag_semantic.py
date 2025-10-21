@@ -84,32 +84,32 @@ class SemanticLLMRanker:
         """Pure semantic evaluation - Fully based on LLM understanding with lenient scoring"""
 
         evaluation_prompt = f"""
-        質問: {query}
-        参考テキスト: {content}
+        Question: {query}
+        Reference Text: {content}
 
-        この参考テキストと質問の意味的関連性を評価し、回答を生成してください。
+        Evaluate the semantic relevance between this reference text and the question, then generate an answer.
 
-        重要な評価基準:
-        1. まず、参考テキストが質問の主題と関連しているか確認してください
-           - 質問の主要なキーワード（例：「コンバイン」）が参考テキストの主題と一致する必要があります
-           - 主題が完全に異なる場合（例：質問が「コンバイン」で、テキストが「コンビニスイーツ」や「コンピュータ」）は0.0としてください
-           - 空の要約文（「与えられた文章を要約します」のみ）は0.0としてください
+        Important Evaluation Criteria:
+        1. First, verify if the reference text is related to the question's topic
+           - The main keywords of the question must match the topic of the reference text
+           - If topics are completely different, score as 0.0
+           - Empty summary statements should be scored as 0.0
 
-        2. 主題が一致する場合のみ、以下の基準で評価してください：
-           - 質問が複数の側面を含む場合（例：「〜とは何か」と「その構造」）、参考テキストが一部でも回答できれば高スコア
-           - 部分的な情報でも有用であれば0.5以上
-           - 完全に回答できる場合は0.8以上
+        2. Only if topics match, evaluate using these criteria:
+           - If the question contains multiple aspects, give high score even if text can partially answer
+           - Partial but useful information should score 0.5 or higher
+           - Complete answer capability should score 0.8 or higher
 
-        評価要件:
-        1. 関連性スコアを評価 (0-1の間)
-        2. 評価理由を説明
-        3. 参考テキストに基づいて回答を生成
+        Evaluation Requirements:
+        1. Evaluate relevance score (between 0-1)
+        2. Explain the reasoning
+        3. Generate an answer based on the reference text
 
-        JSON形式で返してください:
+        Return in JSON format:
         {{
-            "relevance_score": <0-1のスコア、主題が異なる場合は必ず0.0>,
-            "reason": "<このスコアを付けた理由>",
-            "generated_answer": "<参考テキストに基づいて生成した回答>"
+            "relevance_score": <score between 0-1, must be 0.0 if topics differ>,
+            "reason": "<reasoning for this score>",
+            "generated_answer": "<answer generated based on reference text>"
         }}
         """
 
@@ -117,7 +117,7 @@ class SemanticLLMRanker:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "あなたは知的な質問応答アシスタントです。テキストの関連性を正確に評価し、完全な回答を生成できます。"},
+                    {"role": "system", "content": "You are an intelligent question-answering assistant. You can accurately evaluate text relevance and generate complete answers."},
                     {"role": "user", "content": evaluation_prompt}
                 ],
                 temperature=0.1,
@@ -155,11 +155,11 @@ class SemanticLLMRanker:
                 parsed = json.loads(json_str)
 
                 relevance_score = float(parsed.get('relevance_score', 0.0))
-                reason = parsed.get('reason', '未提供理由')
+                reason = parsed.get('reason', 'No reason provided')
                 generated_answer = parsed.get('generated_answer', '')
 
                 if not generated_answer or generated_answer.strip() == '':
-                    generated_answer = "抱歉，无法基于参考文本生成回答。"
+                    generated_answer = "Sorry, unable to generate answer based on reference text."
 
                 return relevance_score, reason, generated_answer
             else:
@@ -411,23 +411,23 @@ class PureSemanticRAG:
     def _decompose_query(self, query: str) -> List[str]:
         """Decompose complex query into sub-questions if applicable"""
         decomposition_prompt = f"""
-        質問: {query}
+        Question: {query}
 
-        この質問を分析してください。質問が複数の側面を含んでいる場合（例：「〜とは何か」と「その構造」）、独立したサブ質問に分解してください。
+        Analyze this question. If it contains multiple aspects (e.g., "what is X" and "its structure"), decompose it into independent sub-questions.
 
-        JSON形式で返してください:
+        Return in JSON format:
         {{
-            "is_complex": <true/false、複数の側面を含むかどうか>,
-            "sub_questions": [<サブ質問のリスト。単純な質問の場合は元の質問のみ>]
+            "is_complex": <true/false, whether it contains multiple aspects>,
+            "sub_questions": [<list of sub-questions. For simple questions, return only the original question>]
         }}
 
-        例1:
-        質問: コンバインとは何かとその構造を説明してください
-        回答: {{"is_complex": true, "sub_questions": ["コンバインとは何ですか", "コンバインの構造を説明してください"]}}
+        Example 1:
+        Question: What is a combine harvester and explain its structure
+        Response: {{"is_complex": true, "sub_questions": ["What is a combine harvester?", "Explain the structure of a combine harvester"]}}
 
-        例2:
-        質問: 農業機械の種類について教えてください
-        回答: {{"is_complex": false, "sub_questions": ["農業機械の種類について教えてください"]}}
+        Example 2:
+        Question: Tell me about types of agricultural machinery
+        Response: {{"is_complex": false, "sub_questions": ["Tell me about types of agricultural machinery"]}}
         """
 
         try:
@@ -469,11 +469,11 @@ class PureSemanticRAG:
 
         # Otherwise, expand the single query
         expansion_prompt = f"""
-        元の質問: {query}
+        Original Question: {query}
 
-        この質問の意味的に同等な1つのバリエーションを生成してください。|で区切って返してください（元の質問を含めて合計2つ）：
+        Generate one semantically equivalent variation of this question. Return separated by | (total of 2 including the original):
 
-        例: 農業機械の種類について教えてください|農業機械の分類について
+        Example: Tell me about types of agricultural machinery|About classification of agricultural machinery
         """
 
         try:
@@ -688,11 +688,11 @@ class PureSemanticRAG:
         """Generate answer based on semantic chunks - Strategy 3: Extract evidence from each high-similarity chunk separately"""
         if not semantic_chunks:
             return {
-                'answer': '抱歉，没有找到相关信息。',
+                'answer': 'Sorry, no relevant information found.',
                 'evidence_text': '',
                 'source_document': '',
                 'confidence': 0.0,
-                'reasoning': '没有找到相关文档',
+                'reasoning': 'No relevant documents found',
                 'evidences': []
             }
 
@@ -700,7 +700,7 @@ class PureSemanticRAG:
         context_parts = []
         chunks_details = []
         for i, chunk in enumerate(semantic_chunks, 1):
-            context_parts.append(f"文档{i}: {chunk.content}")
+            context_parts.append(f"Document {i}: {chunk.content}")
             # Collect detailed scoring information for each chunk
             chunks_details.append({
                 'chunk_id': i,
@@ -731,21 +731,21 @@ class PureSemanticRAG:
 
         # Prompt for generating answer - generate concise summary answer based on original text
         answer_prompt = f"""
-        ユーザーの質問: {query}
+        User's Question: {query}
 
-        参考文書:
+        Reference Documents:
         {context}
 
-        参考文書に基づいてユーザーの質問に回答してください。要件：
-        1. 参考文書を注意深く読み、ユーザーの質問の核心を理解する
-        2. 文書の内容に基づき、簡潔な1-2文で質問の核心的なポイントを直接回答する
-        3. 回答は完全に文書の内容に基づく必要があり、情報を捏造してはいけない
-        4. 原文書の表現方法と用語を使用する
-        5. 定義類の質問（「とは何ですか」など）の場合、核心的な定義のみを示し、詳細な展開は不要
-        6. 分類・列挙類の質問の場合、主要な分類や項目を列挙する
-        7. 日本語原文の表現習慣と語気を保つ
+        Answer the user's question based on the reference documents. Requirements:
+        1. Carefully read the reference documents and understand the core of the user's question
+        2. Based on the document content, directly answer the core point in 1-2 concise sentences
+        3. The answer must be completely based on the document content; do not fabricate information
+        4. Use the original document's expressions and terminology
+        5. For definition questions (e.g., "what is"), provide only the core definition without detailed elaboration
+        6. For classification/enumeration questions, list the main categories or items
+        7. Maintain the original language's expression style and tone
 
-        簡潔な回答（1-2文）を直接提示してください。前置きや追加説明は不要：
+        Provide a concise answer (1-2 sentences) directly, without preamble or additional explanation:
         """
 
         try:
@@ -758,174 +758,79 @@ class PureSemanticRAG:
             print("\n🔍 Starting evidence extraction from each chunk...")
 
             for i, chunk in enumerate(semantic_chunks, 1):
-                # Patent-compliant evidence extraction: LLM outputs character ranges first
-                # Strategy 1: Direct substring matching (most reliable for exact matches)
-                # Extract key phrases from the answer that should appear in evidence
+                # Pure LLM-based evidence extraction - No hardcoded rules
                 import re
 
-                # Split answer into key phrases (by punctuation) and also extract key n-grams
-                answer_phrases = []
+                # Use LLM to extract evidence with semantic relevance scoring
+                evidence_range_prompt = f"""
+Task: Identify the parts of the document that support the answer and evaluate their relevance.
 
-                # Method 1: Split by punctuation
-                phrases_from_split = [p.strip() for p in re.split(r'[、。，]', answer) if len(p.strip()) > 3]
-                answer_phrases.extend(phrases_from_split)
+Question: {query}
+Answer: {answer}
+Document: {chunk.content}
 
-                # Method 2: Extract key content words (4+ chars)
-                content_phrases = re.findall(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]{4,}', answer)
-                answer_phrases.extend(content_phrases)
+Instructions:
+1. Evaluate whether the document contains evidence that supports the answer
+2. If relevance is low (unrelated to question or doesn't support answer), output "empty"
+3. Only if relevance is high, identify the character ranges of the evidence
+4. Output format: character M～character N (multiple ranges separated by comma)
+5. Keep evidence ranges as short and minimal as necessary
 
-                # Method 3: Extract key phrases with common endings (flexible matching)
-                # e.g., "梅雨は雨季の一種であり" -> also try "雨季の一種である", "雨季の一種", etc.
-                flexible_phrases = []
-                for phrase in phrases_from_split:
-                    # Try removing common verb endings
-                    for ending in ['であり', 'です', 'ます', 'ました', 'である']:
-                        if phrase.endswith(ending):
-                            base = phrase[:-len(ending)]
-                            if len(base) >= 4:
-                                flexible_phrases.append(base + 'である')
-                                flexible_phrases.append(base)
+Judgment Criteria:
+- Does the document's topic match the question's topic?
+- Does the document directly support the answer's claims?
+- Does it contain clear evidence, not vague associations?
 
-                    # Try removing subject prefixes (e.g., "梅雨は" from "梅雨は雨季の一種であり")
-                    # Look for "Xは" pattern and extract the part after "は"
-                    if 'は' in phrase:
-                        parts = phrase.split('は', 1)
-                        if len(parts) == 2 and len(parts[1]) >= 4:
-                            suffix = parts[1]
-                            flexible_phrases.append(suffix)
-                            # Also try with である ending
-                            for ending in ['であり', 'です', 'ます']:
-                                if suffix.endswith(ending):
-                                    base = suffix[:-len(ending)]
-                                    if len(base) >= 4:
-                                        flexible_phrases.append(base + 'である')
-                                        flexible_phrases.append(base)
+Example 1 (High Relevance):
+Question: What season type is the rainy season?
+Answer: The rainy season is a type of wet season.
+Document: Rainy season [SEP] The rainy season is a weather phenomenon seen in East Asia, occurring from May to July with cloudy and rainy periods. It is a type of wet season.
+Output: character 80～character 87
 
-                answer_phrases.extend(flexible_phrases)
+Example 2 (Low Relevance):
+Question: What is the structure of a combine harvester?
+Answer: A combine harvester consists of a cutting section and a threshing section.
+Document: Rainy season [SEP] As winter ends and spring approaches, the Siberian air mass weakens and gradually moves north.
+Output: empty
 
-                # Remove duplicates while preserving order
-                seen = set()
-                answer_phrases = [p for p in answer_phrases if p not in seen and not seen.add(p)]
+Evidence Range:
+"""
 
-                direct_match_ranges = []
-                direct_match_texts = []
-
-                for phrase in answer_phrases:
-                    # Look for this phrase (or close variations) in the chunk
-                    if phrase in chunk.content:
-                        phrase_start = chunk.content.find(phrase)
-                        phrase_end = phrase_start + len(phrase)
-
-                        # Avoid duplicate ranges
-                        range_tuple = (phrase_start + 1, phrase_end)
-                        if range_tuple not in direct_match_ranges:
-                            direct_match_ranges.append(range_tuple)  # 1-based
-                            direct_match_texts.append(chunk.content[phrase_start:phrase_end])
-                            print(f"   ✓ Direct match found: '{phrase}' at {phrase_start + 1}～{phrase_end}")
-
-                # Strategy 2: Sentence-level matching for answer keywords
-                answer_keywords = []
-                for sentence in answer.split('。'):
-                    sentence = sentence.strip()
-                    # Extract important terms (kanji-containing words 2+ chars)
-                    words = re.findall(r'[\u4e00-\u9fff]+[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]*', sentence)
-                    answer_keywords.extend([w for w in words if len(w) >= 2])
-
-                keyword_match_ranges = []
-                keyword_match_texts = []
-
-                if not direct_match_ranges and answer_keywords:
-                    # Find sentences containing answer keywords
-                    sentences = chunk.content.replace('。', '。\n').split('\n')
-                    for sent in sentences:
-                        sent = sent.strip()
-                        if not sent or sent.startswith('[SEP]'):
-                            continue
-
-                        # Check if this sentence contains answer keywords
-                        keyword_count = sum(1 for kw in answer_keywords if kw in sent)
-                        if keyword_count >= 1:
-                            # Find position of this sentence in chunk
-                            sent_start = chunk.content.find(sent)
-                            if sent_start >= 0:
-                                sent_end = sent_start + len(sent)
-                                keyword_match_ranges.append((sent_start + 1, sent_end))
-                                keyword_match_texts.append(sent)
-                                print(f"   ✓ Keyword match: sentence with {keyword_count} keywords at {sent_start + 1}～{sent_end}")
-                                if len(keyword_match_ranges) >= 2:  # Limit to 2 sentences
-                                    break
-
-                # Strategy 3: LLM-based extraction (as fallback for complex cases)
                 llm_match_ranges = []
                 llm_match_texts = []
 
-                if not direct_match_ranges and not keyword_match_ranges:
-                    evidence_range_prompt = f"""
-タスク：文書から回答を支持する根拠となる部分の文字範囲を特定してください。
+                try:
+                    evidence_response = self.llm.invoke(evidence_range_prompt)
+                    range_output = evidence_response.content.strip()
 
-質問: {query}
-回答: {answer}
-文書: {chunk.content}
+                    if range_output.lower() != "empty" and range_output != "":
+                        # Parse ranges - support both English and Japanese format
+                        range_pattern = r'(?:character\s+)?(\d+)(?:文字目)?～(?:character\s+)?(\d+)(?:文字目)?'
+                        matches = re.findall(range_pattern, range_output)
 
-指示：
-1. 回答の主張を裏付ける文書内の該当箇所を探してください
-2. タイトル部分（"[SEP]"の前）は避けてください
-3. 複数範囲がある場合はカンマ区切りで出力
-4. 該当なしの場合は「空」と出力
-5. 出力形式: M文字目～N文字目
+                        for start_str, end_str in matches:
+                            start = int(start_str)
+                            end = int(end_str)
 
-例：
-- 質問：梅雨とは何季の一種か?
-  回答：梅雨は雨季の一種です。
-  文書：梅雨 [SEP] 梅雨は東アジアで見られる気象現象で、5月から7月にかけて来る曇りや雨の多い期間のこと。雨季の一種である。
-  正しい出力：80文字目～88文字目
-  誤り例：1文字目～10文字目（タイトル部分は不可）
+                            if 1 <= start <= len(chunk.content) and start <= end <= len(chunk.content):
+                                substring = chunk.content[start-1:end]
+                                llm_match_ranges.append((start, end))
+                                llm_match_texts.append(substring)
+                                print(f"   ✓ LLM extraction: {start}～{end} ('{substring}')")
+                except Exception as llm_e:
+                    print(f"   ⚠️ LLM extraction failed: {llm_e}")
 
-根拠範囲：
-"""
-
-                    try:
-                        evidence_response = self.llm.invoke(evidence_range_prompt)
-                        range_output = evidence_response.content.strip()
-
-                        if range_output != "空" and range_output != "":
-                            # Parse ranges
-                            range_pattern = r'(\d+)文字目～(\d+)文字目'
-                            matches = re.findall(range_pattern, range_output)
-
-                            for start_str, end_str in matches:
-                                start = int(start_str)
-                                end = int(end_str)
-
-                                if 1 <= start <= len(chunk.content) and start <= end <= len(chunk.content):
-                                    substring = chunk.content[start-1:end]
-                                    llm_match_ranges.append((start, end))
-                                    llm_match_texts.append(substring)
-                                    print(f"   ✓ LLM extraction: {start}～{end}")
-                    except Exception as llm_e:
-                        print(f"   ⚠️ LLM extraction failed: {llm_e}")
-
-                # Choose best strategy
-                if direct_match_ranges:
-                    char_ranges = direct_match_ranges
-                    extracted_evidence = "\n".join(direct_match_texts)
-                    is_empty = False
-                    print(f"   ✅ Using direct phrase matching")
-                elif keyword_match_ranges:
-                    char_ranges = keyword_match_ranges
-                    extracted_evidence = "\n".join(keyword_match_texts)
-                    is_empty = False
-                    print(f"   ✅ Using keyword-based sentence matching")
-                elif llm_match_ranges:
+                # Use LLM results
+                if llm_match_ranges:
                     char_ranges = llm_match_ranges
                     extracted_evidence = "\n".join(llm_match_texts)
                     is_empty = False
-                    print(f"   ✅ Using LLM extraction")
+                    print(f"   ✅ LLM found {len(llm_match_ranges)} evidence range(s)")
                 else:
                     char_ranges = []
                     extracted_evidence = ""
                     is_empty = True
-                    print(f"   ❌ No evidence found in chunk")
+                    print(f"   ❌ LLM: No relevant evidence in this chunk")
 
                 # Create evidence info
                 evidence_info = {
@@ -952,17 +857,9 @@ class PureSemanticRAG:
                     f.write(f"\n{'='*80}\n")
                     f.write(f"Query: {query}\n")
                     f.write(f"Generated Answer: {answer}\n")
-                    f.write(f"Chunk {i} - Similarity: {chunk.similarity_score:.3f}\n")
+                    f.write(f"Chunk {i} - Similarity: {chunk.similarity_score:.3f}, Semantic Relevance: {chunk.semantic_relevance:.3f}\n")
                     f.write(f"Original chunk ({len(chunk.content)} chars):\n{chunk.content}\n")
-                    f.write(f"\nExtraction strategy: ")
-                    if direct_match_ranges:
-                        f.write("Direct phrase matching\n")
-                    elif keyword_match_ranges:
-                        f.write("Keyword-based sentence matching\n")
-                    elif llm_match_ranges:
-                        f.write("LLM extraction\n")
-                    else:
-                        f.write("No match\n")
+                    f.write(f"\nExtraction strategy: Pure LLM-based (no hardcoded rules)\n")
                     f.write(f"Char ranges: {char_ranges}\n")
                     f.write(f"Extracted evidence ({len(extracted_evidence)} chars):\n{extracted_evidence}\n")
                     f.write(f"Is empty: {is_empty}\n")
@@ -1001,7 +898,7 @@ class PureSemanticRAG:
         except Exception as e:
             print(f"⚠️ Answer generation failed: {e}")
             return {
-                'answer': '抱歉，生成回答时出现错误。',
+                'answer': 'Sorry, an error occurred during answer generation.',
                 'evidence_text': semantic_chunks[0].content if semantic_chunks else '',
                 'source_document': context,
                 'confidence': 0.3,
@@ -1012,14 +909,14 @@ class PureSemanticRAG:
                 'evidences': []
             }
     
-    def query_with_answer(self, query: str, k: int = 10, relevance_threshold: float = 0.25) -> Dict[str, Any]:
-        """Complete query workflow - Support partial matching: retrieve more documents (k=10), lower threshold (0.25) for better recall"""
+    def query_with_answer(self, query: str, k: int = 10, relevance_threshold: float = 0.5) -> Dict[str, Any]:
+        """Complete query workflow - Retrieve top k documents, filter by semantic relevance (≥ 0.5) for high precision"""
         start_time = time.time()
 
-        # 1. Semantic retrieval - get top k candidate documents (increased to 10 for better recall)
+        # 1. Semantic retrieval - get top k candidate documents
         semantic_chunks = self.semantic_query(query, k)
 
-        # 2. Filter: only keep documents with semantic relevance ≥ threshold (threshold 0.25 allows more partial matches)
+        # 2. Filter: only keep documents with high semantic relevance (≥ 0.5) for precision
         filtered_chunks = [
             chunk for chunk in semantic_chunks
             if chunk.semantic_relevance >= relevance_threshold
@@ -1029,12 +926,12 @@ class PureSemanticRAG:
         print(f"  📊 Initial retrieval: {len(semantic_chunks)} documents")
         print(f"  ✅ After filtering (relevance≥{relevance_threshold}): {len(filtered_chunks)} documents")
 
-        # 3. If no qualifying documents found, return Japanese apology message
+        # 3. If no qualifying documents found, return apology message
         if not filtered_chunks:
             processing_time = time.time() - start_time
             print(f"  ⚠️ No documents with relevance≥{relevance_threshold} found, returning empty result")
             return {
-                'answer': '申し訳ございませんが、現在利用可能な関連情報が見つかりませんでした。',
+                'answer': 'Sorry, no relevant information is currently available.',
                 'evidence_text': '',
                 'source_document': '',
                 'confidence': 0.0,

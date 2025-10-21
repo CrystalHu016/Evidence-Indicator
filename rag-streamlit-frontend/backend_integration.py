@@ -52,8 +52,8 @@ if BACKEND_AVAILABLE:
             # Check which RAG system to initialize
             if 'PureSemanticRAG' in globals():
                 # Initialize the pure semantic RAG system (no hardcoded rules)
-                # Using chroma_squad_multi_paragraph (improved multi-paragraph retrieval)
-                chroma_path_full = os.path.join(parent_dir, "script", "chroma_squad_multi_paragraph")
+                # Using chroma_squad_dedup (populated database)
+                chroma_path_full = os.path.join(parent_dir, "script", "chroma_squad_dedup")
                 print(f"🔄 [BACKEND] Initializing with database: {chroma_path_full}")
                 enhanced_rag = PureSemanticRAG(
                     api_key,
@@ -111,13 +111,24 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                 result = enhanced_rag.query_with_answer(query)
                 
                 processing_time = time.time() - start_time
+
+                # Extract character ranges from evidences array
+                start_char, end_char = 0, 0
+                evidences = result.get("evidences", [])
+                if evidences and len(evidences) > 0:
+                    first_evidence = evidences[0]
+                    char_ranges = first_evidence.get("char_ranges", [])
+                    if char_ranges and len(char_ranges) > 0:
+                        start_char = char_ranges[0][0]
+                        end_char = char_ranges[0][1]
+
                 backend_result = {
                     "answer": result.get("answer", ""),
                     "source_document": result.get("source_document", ""),
                     "evidence_text": result.get("evidence_text", ""),
                     "highlighted_evidence": result.get("evidence_text", ""),
-                    "start_char": result.get("start_char", 0),
-                    "end_char": result.get("end_char", 0),
+                    "start_char": start_char,
+                    "end_char": end_char,
                     "processing_time": processing_time,
                     "confidence": result.get("confidence", 0.95),
                     "model": "纯语义RAG系统 (无硬编码规则)",

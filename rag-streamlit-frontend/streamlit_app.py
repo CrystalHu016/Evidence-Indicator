@@ -418,7 +418,32 @@ def display_results():
 
     # Get extracted evidences (Strategy 3)
     evidences = result.get('evidences', [])
+
+    # Filter 1: Only keep chunks with actual evidence extracted
     valid_evidences = [e for e in evidences if not e.get('is_empty', True)]
+
+    # Filter 2: Only keep chunks with high semantic relevance (>= 0.5) for display
+    # This prevents showing too many marginally relevant chunks
+    high_relevance_threshold = 0.5
+    filtered_evidences = [
+        e for e in valid_evidences
+        if e.get('semantic_relevance', 0.0) >= high_relevance_threshold
+    ]
+
+    # Filter 3: Limit to top 3 most relevant chunks
+    filtered_evidences = sorted(
+        filtered_evidences,
+        key=lambda e: e.get('semantic_relevance', 0.0),
+        reverse=True
+    )[:3]
+
+    # Use filtered evidences for display (fallback to all valid if none pass filter)
+    display_evidences = filtered_evidences if filtered_evidences else valid_evidences[:3]
+
+    print(f"📊 Evidence filtering: {len(evidences)} total -> {len(valid_evidences)} with evidence -> {len(display_evidences)} displayed")
+
+    # Update valid_evidences to use the filtered version for all subsequent display
+    valid_evidences = display_evidences
 
     # Use RAG extracted evidence for highlighting (to analyze RAG's selection)
     if valid_evidences:
@@ -454,28 +479,61 @@ def display_results():
             if backend_char_ranges and chunk_content:
                 # char_ranges are relative to chunk_content
                 # We need to map them to display_source_doc positions
-                for start, end in backend_char_ranges:
-                    # Extract the actual text from chunk using the range (1-based indexing)
-                    if 1 <= start <= len(chunk_content) and start < end <= len(chunk_content):
-                        evidence_substring = chunk_content[start-1:end]
 
-                        # Find this substring in display_source_doc
-                        if evidence_substring in display_source_doc:
-                            substring_pos = display_source_doc.find(evidence_substring)
-                            if substring_pos >= 0:
+                # Strategy 1: Check if chunk_content is a substring of display_source_doc
+                # If yes, calculate the offset and map all ranges accordingly
+                chunk_offset = display_source_doc.find(chunk_content)
+
+                if chunk_offset >= 0:
+                    # chunk_content is found in display_source_doc
+                    # All char_ranges can be mapped by adding the offset
+                    print(f"✅ Chunk found in display at offset {chunk_offset}, mapping all ranges...")
+
+                    for start, end in backend_char_ranges:
+                        # Validate range within chunk
+                        if 1 <= start <= len(chunk_content) and start < end <= len(chunk_content):
+                            # Map to display_source_doc (convert to 0-based, add offset, convert back to 1-based)
+                            display_start = chunk_offset + (start - 1) + 1  # = chunk_offset + start
+                            display_end = chunk_offset + (end - 1) + 1      # = chunk_offset + end
+
+                            sentence_ranges.append(f"{display_start}文字目～{display_end}文字目")
+                            char_position_ranges.append((display_start, display_end))
+
+                            print(f"  Mapped range: chunk[{start}:{end}] -> display[{display_start}:{display_end}]")
+                        else:
+                            print(f"⚠️ Invalid char_range: {start}～{end} for chunk length {len(chunk_content)}")
+                else:
+                    # Strategy 2: Chunk not found as substring - try individual evidence substring matching
+                    print(f"⚠️ Chunk not found as substring in display, trying individual evidence matching...")
+
+                    for start, end in backend_char_ranges:
+                        # Extract the actual text from chunk using the range (1-based indexing)
+                        if 1 <= start <= len(chunk_content) and start < end <= len(chunk_content):
+                            evidence_substring = chunk_content[start-1:end]
+
+                            # Find this substring in display_source_doc
+                            # Use finditer to find all occurrences and pick the best match
+                            import re
+                            escaped_substring = re.escape(evidence_substring)
+                            matches = list(re.finditer(escaped_substring, display_source_doc))
+
+                            if matches:
+                                # Use the first occurrence (could be improved with context matching)
+                                match = matches[0]
+                                substring_pos = match.start()
+
                                 # Calculate position in display_source_doc (1-based)
                                 context_start_pos = substring_pos + 1
                                 context_end_pos = substring_pos + len(evidence_substring)
 
                                 sentence_ranges.append(f"{context_start_pos}文字目～{context_end_pos}文字目")
                                 char_position_ranges.append((context_start_pos, context_end_pos))
+
+                                print(f"  Found evidence substring at display[{context_start_pos}:{context_end_pos}]")
                             else:
-                                # Substring not found in display, skip this range
                                 print(f"⚠️ Evidence substring not found in display: {evidence_substring[:50]}...")
                         else:
-                            print(f"⚠️ Evidence substring not in display: {evidence_substring[:50]}...")
-                    else:
-                        print(f"⚠️ Invalid char_range: {start}～{end} for chunk length {len(chunk_content)}")
+                            print(f"⚠️ Invalid char_range: {start}～{end} for chunk length {len(chunk_content)}")
 
     # Fallback: Calculate ranges if backend didn't provide them (for backward compatibility)
     if not char_position_ranges and display_evidence and display_evidence != '根拠情報なし':
@@ -495,10 +553,26 @@ def display_results():
                 end_pos_orig = end_pos_display + prefix_offset
                 char_position_ranges.append((start_pos_orig, end_pos_orig))
 
-    # Show highlighted version with RAG evidence (pass char_position_ranges)
+    # Show highlighted version with RAG evidence
     st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
-    highlighted_html = highlight_rag_evidence_in_source(display_source_doc, display_evidence, char_position_ranges)
-    st.markdown(highlighted_html, unsafe_allow_html=True)
+
+    # Display each chunk with its own evidence highlighting separately
+    if valid_evidences and len(valid_evidences) > 1:
+        # Multiple chunks - display each separately with its own highlighting
+        for idx, evidence in enumerate(valid_evidences, 1):
+            chunk_content = evidence.get('chunk_content', '')
+            backend_char_ranges = evidence.get('char_ranges', [])
+            extracted_evidence = evidence.get('extracted_evidence', '')
+
+            if chunk_content and backend_char_ranges:
+                st.markdown(f"**Chunk {idx}:**")
+                # Highlight within this specific chunk using its char_ranges
+                highlighted_html = highlight_rag_evidence_in_source(chunk_content, extracted_evidence, backend_char_ranges)
+                st.markdown(highlighted_html, unsafe_allow_html=True)
+    else:
+        # Single chunk or fallback - use original logic
+        highlighted_html = highlight_rag_evidence_in_source(display_source_doc, display_evidence, char_position_ranges)
+        st.markdown(highlighted_html, unsafe_allow_html=True)
 
     st.markdown(t("**📄 元の文書:**", "**📄 Original document:**"))
 
@@ -563,15 +637,27 @@ def display_results():
     # Evidence information - use display_evidence (extracted evidence, not full chunk)
     evidence_text = result.get('evidence_text', '根拠情報なし')
 
-    # Display all sentence ranges
-    if sentence_ranges:
+    # Display character ranges for each chunk separately
+    st.markdown(t("### 【根拠情報の文字列範囲】", "### Evidence character ranges"))
+
+    if valid_evidences:
+        # Display ranges for each chunk separately
+        for idx, evidence in enumerate(valid_evidences, 1):
+            backend_char_ranges = evidence.get('char_ranges', [])
+            extracted_evidence = evidence.get('extracted_evidence', '')
+
+            if backend_char_ranges:
+                # Format ranges for this chunk
+                chunk_ranges = [f"{start}文字目～{end}文字目" for start, end in backend_char_ranges]
+                ranges_text = "、".join(chunk_ranges)
+                st.markdown(f"**Chunk {idx}:** {ranges_text}")
+    elif sentence_ranges:
+        # Fallback: display all ranges together
         ranges_text = "、".join(sentence_ranges)
-        st.markdown(t(f"### 【根拠情報の文字列範囲】{ranges_text}",
-                     f"### Evidence character ranges: {ranges_text}"))
+        st.markdown(ranges_text)
     else:
-        # Fallback to old logic
-        st.markdown(t(f"### 【根拠情報の文字列範囲】{eff_start}文字目～{eff_end}文字目",
-                     f"### Evidence character range: {eff_start} to {eff_end}"))
+        # Old logic fallback
+        st.markdown(f"{eff_start}文字目～{eff_end}文字目")
 
     st.markdown(t("### 【根拠情報】", "### Evidence"))
 
