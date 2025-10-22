@@ -144,7 +144,8 @@ class QueryHistoryManager:
         extracted_ranges: List[Dict[str, int]],
         extracted_texts: List[str],
         similarity_score: float = 0.0,
-        semantic_relevance: float = 0.0
+        semantic_relevance: float = 0.0,
+        core_term: str = ""
     ):
         """Add evidence extraction details
 
@@ -158,6 +159,7 @@ class QueryHistoryManager:
             extracted_texts: List of extracted text strings
             similarity_score: Vector similarity score
             semantic_relevance: LLM semantic relevance score
+            core_term: Identified core term from the answer
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -169,15 +171,15 @@ class QueryHistoryManager:
         cursor.execute("""
             INSERT INTO evidence_extraction
             (query_id, chunk_id, chunk_content, extraction_prompt, llm_raw_response,
-             extracted_ranges, extracted_texts, similarity_score, semantic_relevance)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             extracted_ranges, extracted_texts, similarity_score, semantic_relevance, core_term)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (query_id, chunk_id, chunk_content, extraction_prompt, llm_raw_response,
-              ranges_json, texts_json, similarity_score, semantic_relevance))
+              ranges_json, texts_json, similarity_score, semantic_relevance, core_term))
 
         conn.commit()
         conn.close()
 
-        print(f"📌 Evidence extraction saved for query_id={query_id}, chunk={chunk_id}")
+        print(f"📌 Evidence extraction saved for query_id={query_id}, chunk={chunk_id}, core_term='{core_term}'")
 
     def add_dataset_comparison(
         self,

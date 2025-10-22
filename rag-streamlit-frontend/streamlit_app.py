@@ -195,7 +195,7 @@ def initialize_session_state():
                     evidence_records = manager.get_evidence_for_query(query_id)
                     for ev_record in evidence_records:
                         # ev_record: (id, query_id, chunk_id, chunk_content, extraction_prompt, llm_response,
-                        #             extracted_ranges, extracted_texts, similarity_score, semantic_relevance, created_at)
+                        #             extracted_ranges, extracted_texts, similarity_score, semantic_relevance, created_at, core_term)
                         evidence_item = {
                             'chunk_id': ev_record[2],
                             'chunk_content': ev_record[3],
@@ -205,7 +205,8 @@ def initialize_session_state():
                             'char_ranges': json.loads(ev_record[6]) if ev_record[6] else [],
                             'similarity_score': ev_record[8],
                             'semantic_relevance': ev_record[9],
-                            'is_empty': not bool(ev_record[7])
+                            'is_empty': not bool(ev_record[7]),
+                            'core_term': ev_record[11] if len(ev_record) > 11 else ''  # Load core term if available
                         }
                         history_item['evidences'].append(evidence_item)
                         if not evidence_item['is_empty'] and ev_record[7]:
@@ -458,7 +459,16 @@ def display_results():
     st.markdown(t("### 【回答】", "### Answer"))
     answer = result.get('answer', '回答が見つかりませんでした。')
     st.write(answer)
-    
+
+    # Display identified core terms from all chunks
+    evidences = result.get('evidences', [])
+    core_terms = [ev.get('core_term', '') for ev in evidences if ev.get('core_term')]
+    if core_terms:
+        # Remove duplicates while preserving order
+        unique_core_terms = list(dict.fromkeys(core_terms))
+        st.markdown(t("**🎯 LLM回答から識別されたコアタ一ム:**", "**🎯 Core Terms Identified from LLM Answer:**"))
+        st.info(" / ".join(unique_core_terms))
+
     st.markdown(t("### 【検索ヒットのチャンクを含む文書】", "### Source document that contains the hit chunk"))
     source_doc = result.get('source_document', '文書が見つかりませんでした。')
     start_char = result.get('start_char', 0)
@@ -761,6 +771,8 @@ def display_results():
 
 def add_to_history(query: str, result: dict):
     """Add query and result to history"""
+    print(f"\n🔵 add_to_history called for query: {query[:50]}...")
+
     # Extract highlighted evidence texts from evidences
     evidences = result.get('evidences', [])
     highlighted_evidences = []
@@ -768,7 +780,43 @@ def add_to_history(query: str, result: dict):
         if not evidence.get('is_empty', True) and evidence.get('extracted_evidence'):
             highlighted_evidences.append(evidence['extracted_evidence'])
 
+    print(f"🔵 Found {len(evidences)} evidences, HISTORY_MANAGER_AVAILABLE={HISTORY_MANAGER_AVAILABLE}")
+
+    # Save to database first
+    query_id = None
+    if HISTORY_MANAGER_AVAILABLE:
+        print(f"🔵 Attempting to save to database...")
+        try:
+            manager = QueryHistoryManager(DB_PATH)
+            query_id = manager.add_query(
+                query=query,
+                generated_answer=result.get('answer', ''),
+                confidence=result.get('confidence', 0),
+                processing_time=result.get('processing_time', 0),
+                model=result.get('model', 'Unknown')
+            )
+
+            # Save each evidence to database
+            for evidence in evidences:
+                manager.add_evidence_extraction(
+                    query_id=query_id,
+                    chunk_id=evidence.get('chunk_id', 0),
+                    chunk_content=evidence.get('chunk_content', ''),
+                    extraction_prompt=evidence.get('evidence_range_prompt', ''),
+                    llm_raw_response=evidence.get('llm_response', ''),
+                    extracted_ranges=evidence.get('char_ranges', []),
+                    extracted_texts=[evidence.get('extracted_evidence', '')] if evidence.get('extracted_evidence') else [],
+                    similarity_score=evidence.get('similarity_score', 0),
+                    semantic_relevance=evidence.get('semantic_relevance', 0),
+                    core_term=evidence.get('core_term', '')
+                )
+
+            print(f"✅ Saved query {query_id} to database with {len(evidences)} evidence entries")
+        except Exception as e:
+            print(f"⚠️ Failed to save query to database: {e}")
+
     history_item = {
+        'query_id': query_id,  # Store database ID for later operations
         'timestamp': datetime.now(),
         'query': query,
         'answer': result.get('answer', ''),
@@ -781,7 +829,7 @@ def add_to_history(query: str, result: dict):
         'highlighted_evidences': highlighted_evidences  # Store extracted evidence texts
     }
     st.session_state.query_history.append(history_item)
-    
+
     # Keep only last N queries
     max_history = st.session_state.settings.get('max_history', AppConfig.MAX_HISTORY_ITEMS)
     if len(st.session_state.query_history) > max_history:
@@ -847,6 +895,14 @@ def query_history_interface():
                 st.write(item['query'])
                 st.markdown(t("**回答:**", "**Answer:**"))
                 st.write(item['answer'])
+
+                # Display identified core terms
+                item_evidences = item.get('evidences', [])
+                item_core_terms = [ev.get('core_term', '') for ev in item_evidences if ev.get('core_term')]
+                if item_core_terms:
+                    unique_item_core_terms = list(dict.fromkeys(item_core_terms))
+                    st.markdown(t("**🎯 LLM回答から識別されたコアタ一ム:**", "**🎯 Core Terms Identified from LLM Answer:**"))
+                    st.info(" / ".join(unique_item_core_terms))
 
                 # Display highlighted evidence (根拠情報)
                 highlighted_evidences = item.get('highlighted_evidences', [])

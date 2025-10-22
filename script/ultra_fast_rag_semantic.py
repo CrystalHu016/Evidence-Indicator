@@ -786,30 +786,39 @@ Instructions:
    - "いつ" (when) → looking for a TIME PERIOD
    - "どこ" (where) → looking for a LOCATION
 
-2. From the answer , identify the CORE TERM that answers the question,make the term as precise as possible.-- output the core term that llm identified as the answer core term.
+2. From the answer, identify the CORE TERM that answers the question, make the term as precise as possible.
 
 3. Find that core term which has the highest semantic relevance in the document and extract it
-
 
 4. CRITICAL RULES for noun phrase extraction:
    - MUST include ALL modifiers (e.g., "亜熱帯" in "亜熱帯ジェット気流")
    - Do NOT include verbs or particles (も、が、は、を、北上し、覆っている, etc.)
    - Extract the COMPLETE noun phrase, not a fragment
 
+5. Output format (MUST follow this exact format):
+   Core Term: [the identified core term]
+   Character Range: character M～character N (where M is start position, N is end position)
 
-5. Output format:
-   - If core term exists in document: character M～character N (where M is start position, N is end position)
-   - If core term does NOT exist in document: empty
+   OR if core term does NOT exist in document:
+   Core Term: [the identified core term]
+   Character Range: empty
 
 Evidence Range:
 """
 
                 llm_match_ranges = []
                 llm_match_texts = []
+                core_term = ""  # Store the identified core term
 
                 try:
                     evidence_response = self.llm.invoke(evidence_range_prompt)
                     range_output = evidence_response.content.strip()
+
+                    # Extract core term from the response
+                    core_term_match = re.search(r'Core Term:\s*(.+?)(?:\n|$)', range_output, re.IGNORECASE)
+                    if core_term_match:
+                        core_term = core_term_match.group(1).strip()
+                        print(f"   🎯 Identified core term: '{core_term}'")
 
                     if range_output.lower() != "empty" and range_output != "":
                         # Parse ranges - support both English and Japanese format
@@ -860,7 +869,8 @@ Evidence Range:
                     'semantic_relevance': float(chunk.semantic_relevance),
                     'is_empty': is_empty,
                     'evidence_range_prompt': evidence_range_prompt,  # Store the prompt used for extraction
-                    'llm_response': range_output  # Store the LLM raw response
+                    'llm_response': range_output,  # Store the LLM raw response
+                    'core_term': core_term  # Store the identified core term
                 }
 
                 evidences.append(evidence_info)
