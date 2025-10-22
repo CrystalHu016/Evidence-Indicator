@@ -8,7 +8,6 @@ import os
 import re
 import json
 import time
-import sys
 from typing import Optional, Tuple, List, Dict, Any
 from dataclasses import dataclass
 from pydantic import SecretStr
@@ -19,17 +18,6 @@ from langchain_community.document_loaders import JSONLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from dotenv import load_dotenv
-
-# Add parent directory to path to import query_history_manager
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, parent_dir)
-
-try:
-    from query_history_manager import QueryHistoryManager
-    HISTORY_MANAGER_AVAILABLE = True
-except ImportError:
-    HISTORY_MANAGER_AVAILABLE = False
-    print("⚠️ QueryHistoryManager not available, history will not be saved")
 
 
 @dataclass
@@ -201,7 +189,7 @@ class SemanticLLMRanker:
 
 class PureSemanticRAG:
     """Pure Semantic RAG System - Fully based on LLM semantic understanding"""
-
+    
     def __init__(self, openai_api_key: str, chroma_path: str = "./chroma_semantic"):
         self.openai_api_key = openai_api_key
         self.chroma_path = chroma_path
@@ -219,14 +207,6 @@ class PureSemanticRAG:
 
         # Semantic ranking system
         self.semantic_ranker = SemanticLLMRanker(openai_api_key)
-
-        # Initialize history manager (persistent storage)
-        if HISTORY_MANAGER_AVAILABLE:
-            db_path = os.path.join(parent_dir, "query_history.db")
-            self.history_manager = QueryHistoryManager(db_path)
-            print(f"✅ Query history manager initialized: {db_path}")
-        else:
-            self.history_manager = None
 
         # Configuration - Balanced for accuracy and recall
         self.config = {
@@ -790,26 +770,15 @@ class PureSemanticRAG:
                 # Pure LLM-based evidence extraction - No hardcoded rules
                 import re
 
-                # Create indexed document to help LLM count positions accurately
-                indexed_doc = ""
-                for idx, char in enumerate(chunk.content):
-                    if idx % 10 == 0:
-                        indexed_doc += f"\n[{idx}]"
-                    indexed_doc += char
-
                 # Use LLM to extract evidence with semantic relevance scoring
                 evidence_range_prompt = f"""
 Task: You MUST extract the core keyword/term from the document, even if the answer is long.
 
 Question: {query}
 Answer: {answer}
-
-Document (with character position markers every 10 characters):
-{indexed_doc}
+Document: {chunk.content}
 
 CRITICAL: Even if the answer is a long sentence, you MUST identify and extract the core term that directly answers the question. Do NOT output "empty" unless the document truly doesn't contain the answer.
-
-IMPORTANT: Use the [position] markers to count character positions accurately. The number in brackets shows the starting position of that segment.
 
 Instructions:
 1. Analyze the question to identify what it's asking for:
@@ -817,75 +786,20 @@ Instructions:
    - "いつ" (when) → looking for a TIME PERIOD
    - "どこ" (where) → looking for a LOCATION
 
-2. From the answer, identify the CORE TERM that directly answers the question (make the term as precise as possible).
+2. From the answer , identify the CORE TERM that answers the question,make the term as precise as possible.-- output the core term that llm identified as the answer core term.
 
-3. FIRST CHECK: Does this exact core term exist in the document?
-   - If YES: Find it and extract its character range
-   - If NO: Output "empty" and STOP - do NOT extract anything else
+3. Find that core term which has the highest semantic relevance in the document and extract it
+
 
 4. CRITICAL RULES for noun phrase extraction:
    - MUST include ALL modifiers (e.g., "亜熱帯" in "亜熱帯ジェット気流")
    - Do NOT include verbs or particles (も、が、は、を、北上し、覆っている, etc.)
    - Extract the COMPLETE noun phrase, not a fragment
-   - Do NOT extract related terms or synonyms - only extract the EXACT core term
+
 
 5. Output format:
    - If core term exists in document: character M～character N (where M is start position, N is end position)
    - If core term does NOT exist in document: empty
-
-Examples of extracting core terms using position markers:
-
-Example 1:
-Question: 梅雨とは何季の一種か?
-Answer: 梅雨は雨季の一種である。
-Core term to extract: "雨季" (this is what the question asks for)
-
-Document with position markers:
-[0]梅雨 [SEP] 梅
-[10]雨（つゆ、ばいう）は
-[20]、北海道と小笠原諸島
-[30]を除く日本、朝鮮半島
-[40]南部、中国の南部から
-[50]長江流域にかけての沿
-[60]海部、および台湾など
-[70]、東アジアの広範囲に
-[80]おいてみられる特有の
-[90]気象現象で、5月から
-[100]7月にかけて来る曇り
-[110]や雨の多い期間のこと
-[120]。雨季の一種である。
-
-Analysis:
-- Looking for "雨季" in the document
-- Found at position [120] segment: "。雨季の一種である。"
-- "雨季" starts at position 121 (after "。")
-- "雨季" is 2 characters long, so ends at position 123
-
-Correct output: character 121～character 123
-
-Example 2 (When core term does NOT exist in document):
-Question: 梅雨とは何季の一種か?
-Answer: 梅雨は雨季の一種である。
-Core term to extract: "雨季" (this is what the question asks for)
-
-Document with position markers:
-[0]梅雨 [SEP] 梅
-[10]雨の時期が始まることを梅
-[20]雨入りや入梅（にゅうばい）
-[30]といい、社会通念上・
-[40]気象学上は春の終わり
-[50]であるとともに夏の始
-[60]まり（初夏）とされる
-[70]。
-
-Analysis:
-- Looking for "雨季" in the document
-- Searched through entire document: "雨季" does NOT exist
-- Document only mentions "春の終わり", "夏の始まり", "初夏" (related concepts but NOT the core term)
-- Do NOT extract related terms like "初夏" - they are not the answer
-
-Correct output: empty
-
 
 Evidence Range:
 """
@@ -896,31 +810,6 @@ Evidence Range:
                 try:
                     evidence_response = self.llm.invoke(evidence_range_prompt)
                     range_output = evidence_response.content.strip()
-
-                    # === DETAILED LOGGING START ===
-                    import json
-                    from datetime import datetime
-
-                    # Prepare log entry with all details
-                    log_entry = {
-                        "timestamp": datetime.now().isoformat(),
-                        "query": query,
-                        "generated_answer": answer,
-                        "chunk_id": i,
-                        "chunk_content": chunk.content,
-                        "evidence_extraction_prompt": evidence_range_prompt,
-                        "llm_raw_response": range_output,
-                        "extracted_ranges": [],
-                        "extracted_texts": [],
-                        "dataset_answer": "",  # Will be filled if available
-                        "dataset_answer_position": None
-                    }
-
-                    # Try to extract dataset answer from chunk metadata if available
-                    chunk_metadata = chunk.metadata.get('original_metadata', {})
-                    if 'related_item_ids' in chunk_metadata:
-                        # This might contain reference to original dataset
-                        log_entry["chunk_metadata"] = str(chunk_metadata)
 
                     if range_output.lower() != "empty" and range_output != "":
                         # Parse ranges - support both English and Japanese format
@@ -935,20 +824,7 @@ Evidence Range:
                                 substring = chunk.content[start-1:end]
                                 llm_match_ranges.append((start, end))
                                 llm_match_texts.append(substring)
-
-                                # Add to log entry
-                                log_entry["extracted_ranges"].append({"start": start, "end": end})
-                                log_entry["extracted_texts"].append(substring)
-
                                 print(f"   ✓ LLM extraction: {start}～{end} ('{substring}')")
-
-                    # Write detailed log to file
-                    log_file = '/tmp/rag_evidence_extraction_detailed.jsonl'
-                    with open(log_file, 'a', encoding='utf-8') as f:
-                        f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
-
-                    # === DETAILED LOGGING END ===
-
                 except Exception as llm_e:
                     print(f"   ⚠️ LLM extraction failed: {llm_e}")
 
@@ -982,7 +858,9 @@ Evidence Range:
                     'char_ranges': char_ranges,  # Store the ranges for frontend
                     'similarity_score': float(chunk.similarity_score),
                     'semantic_relevance': float(chunk.semantic_relevance),
-                    'is_empty': is_empty
+                    'is_empty': is_empty,
+                    'evidence_range_prompt': evidence_range_prompt,  # Store the prompt used for extraction
+                    'llm_response': range_output  # Store the LLM raw response
                 }
 
                 evidences.append(evidence_info)
@@ -1091,55 +969,6 @@ Evidence Range:
         # 5. Add processing time
         processing_time = time.time() - start_time
         result['processing_time'] = processing_time
-
-        # 6. Save to query history database (persistent storage)
-        if self.history_manager:
-            try:
-                # Save main query
-                query_id = self.history_manager.add_query(
-                    query=query,
-                    generated_answer=result['answer'],
-                    processing_time=processing_time,
-                    model=result.get('model', 'PureSemanticRAG'),
-                    confidence=result.get('confidence', 0.0),
-                    num_chunks=result.get('chunks_used', 0)
-                )
-
-                # Save evidence extraction details for each chunk
-                for evidence in result.get('evidences', []):
-                    # Extract LLM response from detailed log if available
-                    llm_raw_response = ""
-                    extraction_prompt = ""
-
-                    # Read the last matching entry from detailed log
-                    try:
-                        with open('/tmp/rag_evidence_extraction_detailed.jsonl', 'r', encoding='utf-8') as f:
-                            lines = f.readlines()
-                            for line in reversed(lines):  # Search from end
-                                log_entry = json.loads(line)
-                                if (log_entry['query'] == query and
-                                    log_entry['chunk_id'] == evidence['chunk_id']):
-                                    llm_raw_response = log_entry['llm_raw_response']
-                                    extraction_prompt = log_entry['evidence_extraction_prompt']
-                                    break
-                    except Exception as log_err:
-                        print(f"⚠️ Could not read detailed log: {log_err}")
-
-                    self.history_manager.add_evidence_extraction(
-                        query_id=query_id,
-                        chunk_id=evidence['chunk_id'],
-                        chunk_content=evidence['chunk_content'],
-                        extraction_prompt=extraction_prompt,
-                        llm_raw_response=llm_raw_response,
-                        extracted_ranges=evidence['char_ranges'],
-                        extracted_texts=[evidence['extracted_evidence']] if evidence['extracted_evidence'] else [],
-                        similarity_score=evidence['similarity_score'],
-                        semantic_relevance=evidence['semantic_relevance']
-                    )
-
-                print(f"✅ Query history saved: query_id={query_id}")
-            except Exception as hist_err:
-                print(f"⚠️ Failed to save query history: {hist_err}")
 
         return result
 

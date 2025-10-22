@@ -199,6 +199,8 @@ def initialize_session_state():
                         evidence_item = {
                             'chunk_id': ev_record[2],
                             'chunk_content': ev_record[3],
+                            'evidence_range_prompt': ev_record[4],  # Store the evidence range prompt
+                            'llm_response': ev_record[5],  # Store the LLM response
                             'extracted_evidence': '\n'.join(json.loads(ev_record[7])) if ev_record[7] else '',
                             'char_ranges': json.loads(ev_record[6]) if ev_record[6] else [],
                             'similarity_score': ev_record[8],
@@ -875,6 +877,22 @@ def query_history_interface():
                                 else:
                                     st.info(chunk_content)
                                 st.markdown("---")
+
+                        # Add extraction prompt expander
+                        with st.expander(t("🔍 Extraction Prompt Instructions", "🔍 Extraction Prompt Instructions")):
+                            for idx, evidence in enumerate(valid_evidences, 1):
+                                extraction_prompt = evidence.get('evidence_range_prompt', '')
+                                llm_response = evidence.get('llm_response', '')
+
+                                if extraction_prompt:
+                                    st.markdown(f"**Chunk {idx} - Extraction Prompt:**")
+                                    st.code(extraction_prompt, language="text")
+
+                                    if llm_response:
+                                        st.markdown(f"**LLM Response:**")
+                                        st.code(llm_response, language="text")
+
+                                    st.markdown("---")
                     else:
                         # Fallback: show original evidence_text if no valid evidences
                         with st.expander(t("📄 完全な根拠チャンク", "📄 Full evidence chunk")):
