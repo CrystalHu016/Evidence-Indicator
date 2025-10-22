@@ -8,6 +8,7 @@ import os
 import re
 import json
 import time
+import sys
 from typing import Optional, Tuple, List, Dict, Any
 from dataclasses import dataclass
 from pydantic import SecretStr
@@ -18,6 +19,17 @@ from langchain_community.document_loaders import JSONLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from dotenv import load_dotenv
+
+# Add parent directory to path to import query_history_manager
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
+try:
+    from query_history_manager import QueryHistoryManager
+    HISTORY_MANAGER_AVAILABLE = True
+except ImportError:
+    HISTORY_MANAGER_AVAILABLE = False
+    print("⚠️ QueryHistoryManager not available, history will not be saved")
 
 
 @dataclass
@@ -81,35 +93,44 @@ class SemanticLLMRanker:
             return [enhanced_chunk]
 
     def _evaluate_chunk_semantically(self, query: str, content: str, vector_score: float) -> Tuple[float, str, str]:
-        """Pure semantic evaluation - Fully based on LLM understanding with lenient scoring"""
+        """Pure semantic evaluation - Fully based on LLM understanding using Few-shot Learning"""
 
         evaluation_prompt = f"""
+        Evaluate how well the reference text can answer the question. Use the examples below to understand how to score:
+
+        Example 1 (High Relevance - Direct Answer):
+        Question: 新たに語（単語）を造ることや、既存の語を組み合わせて新たな意味の語を造ること
+        Reference Text: 造語 [SEP] 造語（ぞうご）は、新たに語（単語）を造ることや、既存の語を組み合わせて新たな意味の語を造ること、また、そうして造られた語である。
+        Score: 0.95
+        Reason: The reference text directly defines and explains the concept asked in the question.
+
+        Example 2 (High Relevance - Contains Answer):
+        Question: 坂本龍一の出身地は？
+        Reference Text: 坂本龍一 [SEP] 坂本 龍一（さかもと りゅういち、Sakamoto Ryūichi、1952年1月17日 - ）は、日本のミュージシャン。東京都出身。
+        Score: 0.9
+        Reason: The reference text contains the specific answer to the question about birthplace.
+
+        Example 3 (Medium Relevance - Partial Information):
+        Question: データベース管理システムの主な機能は？
+        Reference Text: データベース [SEP] コンピュータを使用したデータベース・システムでは、データベース管理用のソフトウェアであるデータベース管理システムを使用する場合も多い。
+        Score: 0.6
+        Reason: Mentions database management systems but doesn't fully explain their main functions.
+
+        Example 4 (Low Relevance - Different Topic):
+        Question: 坂本龍一の出身地は？
+        Reference Text: 造語 [SEP] 造語（ぞうご）は、新たに語（単語）を造ることや、既存の語を組み合わせて新たな意味の語を造ること。
+        Score: 0.0
+        Reason: Completely different topic - question asks about a person's birthplace but text discusses word creation.
+
+        Now evaluate:
         Question: {query}
         Reference Text: {content}
 
-        Evaluate the semantic relevance between this reference text and the question, then generate an answer.
-
-        Important Evaluation Criteria:
-        1. First, verify if the reference text is related to the question's topic
-           - The main keywords of the question must match the topic of the reference text
-           - If topics are completely different, score as 0.0
-           - Empty summary statements should be scored as 0.0
-
-        2. Only if topics match, evaluate using these criteria:
-           - If the question contains multiple aspects, give high score even if text can partially answer
-           - Partial but useful information should score 0.5 or higher
-           - Complete answer capability should score 0.8 or higher
-
-        Evaluation Requirements:
-        1. Evaluate relevance score (between 0-1)
-        2. Explain the reasoning
-        3. Generate an answer based on the reference text
-
         Return in JSON format:
         {{
-            "relevance_score": <score between 0-1, must be 0.0 if topics differ>,
-            "reason": "<reasoning for this score>",
-            "generated_answer": "<answer generated based on reference text>"
+            "relevance_score": <score between 0-1>,
+            "reason": "<your reasoning>",
+            "generated_answer": "<answer based on reference text, or empty string if cannot answer>"
         }}
         """
 
@@ -117,7 +138,7 @@ class SemanticLLMRanker:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an intelligent question-answering assistant. You can accurately evaluate text relevance and generate complete answers."},
+                    {"role": "system", "content": "You are an expert at evaluating semantic relevance between questions and reference texts. Follow the scoring patterns shown in the examples."},
                     {"role": "user", "content": evaluation_prompt}
                 ],
                 temperature=0.1,
@@ -180,7 +201,7 @@ class SemanticLLMRanker:
 
 class PureSemanticRAG:
     """Pure Semantic RAG System - Fully based on LLM semantic understanding"""
-    
+
     def __init__(self, openai_api_key: str, chroma_path: str = "./chroma_semantic"):
         self.openai_api_key = openai_api_key
         self.chroma_path = chroma_path
@@ -198,6 +219,14 @@ class PureSemanticRAG:
 
         # Semantic ranking system
         self.semantic_ranker = SemanticLLMRanker(openai_api_key)
+
+        # Initialize history manager (persistent storage)
+        if HISTORY_MANAGER_AVAILABLE:
+            db_path = os.path.join(parent_dir, "query_history.db")
+            self.history_manager = QueryHistoryManager(db_path)
+            print(f"✅ Query history manager initialized: {db_path}")
+        else:
+            self.history_manager = None
 
         # Configuration - Balanced for accuracy and recall
         self.config = {
@@ -761,37 +790,102 @@ class PureSemanticRAG:
                 # Pure LLM-based evidence extraction - No hardcoded rules
                 import re
 
+                # Create indexed document to help LLM count positions accurately
+                indexed_doc = ""
+                for idx, char in enumerate(chunk.content):
+                    if idx % 10 == 0:
+                        indexed_doc += f"\n[{idx}]"
+                    indexed_doc += char
+
                 # Use LLM to extract evidence with semantic relevance scoring
                 evidence_range_prompt = f"""
-Task: Identify the parts of the document that support the answer and evaluate their relevance.
+Task: You MUST extract the core keyword/term from the document, even if the answer is long.
 
 Question: {query}
 Answer: {answer}
-Document: {chunk.content}
+
+Document (with character position markers every 10 characters):
+{indexed_doc}
+
+CRITICAL: Even if the answer is a long sentence, you MUST identify and extract the core term that directly answers the question. Do NOT output "empty" unless the document truly doesn't contain the answer.
+
+IMPORTANT: Use the [position] markers to count character positions accurately. The number in brackets shows the starting position of that segment.
 
 Instructions:
-1. Evaluate whether the document contains evidence that supports the answer
-2. If relevance is low (unrelated to question or doesn't support answer), output "empty"
-3. Only if relevance is high, identify the character ranges of the evidence
-4. Output format: character M～character N (multiple ranges separated by comma)
-5. Keep evidence ranges as short and minimal as necessary
+1. Analyze the question to identify what it's asking for:
+   - "何" (what) → looking for a NAME/TERM/CONCEPT
+   - "いつ" (when) → looking for a TIME PERIOD
+   - "どこ" (where) → looking for a LOCATION
 
-Judgment Criteria:
-- Does the document's topic match the question's topic?
-- Does the document directly support the answer's claims?
-- Does it contain clear evidence, not vague associations?
+2. From the answer, identify the CORE TERM that directly answers the question (make the term as precise as possible).
 
-Example 1 (High Relevance):
-Question: What season type is the rainy season?
-Answer: The rainy season is a type of wet season.
-Document: Rainy season [SEP] The rainy season is a weather phenomenon seen in East Asia, occurring from May to July with cloudy and rainy periods. It is a type of wet season.
-Output: character 80～character 87
+3. FIRST CHECK: Does this exact core term exist in the document?
+   - If YES: Find it and extract its character range
+   - If NO: Output "empty" and STOP - do NOT extract anything else
 
-Example 2 (Low Relevance):
-Question: What is the structure of a combine harvester?
-Answer: A combine harvester consists of a cutting section and a threshing section.
-Document: Rainy season [SEP] As winter ends and spring approaches, the Siberian air mass weakens and gradually moves north.
-Output: empty
+4. CRITICAL RULES for noun phrase extraction:
+   - MUST include ALL modifiers (e.g., "亜熱帯" in "亜熱帯ジェット気流")
+   - Do NOT include verbs or particles (も、が、は、を、北上し、覆っている, etc.)
+   - Extract the COMPLETE noun phrase, not a fragment
+   - Do NOT extract related terms or synonyms - only extract the EXACT core term
+
+5. Output format:
+   - If core term exists in document: character M～character N (where M is start position, N is end position)
+   - If core term does NOT exist in document: empty
+
+Examples of extracting core terms using position markers:
+
+Example 1:
+Question: 梅雨とは何季の一種か?
+Answer: 梅雨は雨季の一種である。
+Core term to extract: "雨季" (this is what the question asks for)
+
+Document with position markers:
+[0]梅雨 [SEP] 梅
+[10]雨（つゆ、ばいう）は
+[20]、北海道と小笠原諸島
+[30]を除く日本、朝鮮半島
+[40]南部、中国の南部から
+[50]長江流域にかけての沿
+[60]海部、および台湾など
+[70]、東アジアの広範囲に
+[80]おいてみられる特有の
+[90]気象現象で、5月から
+[100]7月にかけて来る曇り
+[110]や雨の多い期間のこと
+[120]。雨季の一種である。
+
+Analysis:
+- Looking for "雨季" in the document
+- Found at position [120] segment: "。雨季の一種である。"
+- "雨季" starts at position 121 (after "。")
+- "雨季" is 2 characters long, so ends at position 123
+
+Correct output: character 121～character 123
+
+Example 2 (When core term does NOT exist in document):
+Question: 梅雨とは何季の一種か?
+Answer: 梅雨は雨季の一種である。
+Core term to extract: "雨季" (this is what the question asks for)
+
+Document with position markers:
+[0]梅雨 [SEP] 梅
+[10]雨の時期が始まることを梅
+[20]雨入りや入梅（にゅうばい）
+[30]といい、社会通念上・
+[40]気象学上は春の終わり
+[50]であるとともに夏の始
+[60]まり（初夏）とされる
+[70]。
+
+Analysis:
+- Looking for "雨季" in the document
+- Searched through entire document: "雨季" does NOT exist
+- Document only mentions "春の終わり", "夏の始まり", "初夏" (related concepts but NOT the core term)
+- Do NOT extract related terms like "初夏" - they are not the answer
+
+Correct output: empty
+
 
 Evidence Range:
 """
@@ -802,6 +896,31 @@ Evidence Range:
                 try:
                     evidence_response = self.llm.invoke(evidence_range_prompt)
                     range_output = evidence_response.content.strip()
+
+                    # === DETAILED LOGGING START ===
+                    import json
+                    from datetime import datetime
+
+                    # Prepare log entry with all details
+                    log_entry = {
+                        "timestamp": datetime.now().isoformat(),
+                        "query": query,
+                        "generated_answer": answer,
+                        "chunk_id": i,
+                        "chunk_content": chunk.content,
+                        "evidence_extraction_prompt": evidence_range_prompt,
+                        "llm_raw_response": range_output,
+                        "extracted_ranges": [],
+                        "extracted_texts": [],
+                        "dataset_answer": "",  # Will be filled if available
+                        "dataset_answer_position": None
+                    }
+
+                    # Try to extract dataset answer from chunk metadata if available
+                    chunk_metadata = chunk.metadata.get('original_metadata', {})
+                    if 'related_item_ids' in chunk_metadata:
+                        # This might contain reference to original dataset
+                        log_entry["chunk_metadata"] = str(chunk_metadata)
 
                     if range_output.lower() != "empty" and range_output != "":
                         # Parse ranges - support both English and Japanese format
@@ -816,16 +935,39 @@ Evidence Range:
                                 substring = chunk.content[start-1:end]
                                 llm_match_ranges.append((start, end))
                                 llm_match_texts.append(substring)
+
+                                # Add to log entry
+                                log_entry["extracted_ranges"].append({"start": start, "end": end})
+                                log_entry["extracted_texts"].append(substring)
+
                                 print(f"   ✓ LLM extraction: {start}～{end} ('{substring}')")
+
+                    # Write detailed log to file
+                    log_file = '/tmp/rag_evidence_extraction_detailed.jsonl'
+                    with open(log_file, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+
+                    # === DETAILED LOGGING END ===
+
                 except Exception as llm_e:
                     print(f"   ⚠️ LLM extraction failed: {llm_e}")
 
                 # Use LLM results
                 if llm_match_ranges:
-                    char_ranges = llm_match_ranges
-                    extracted_evidence = "\n".join(llm_match_texts)
+                    # Deduplicate ranges
+                    seen_ranges = set()
+                    unique_ranges = []
+                    unique_texts = []
+                    for range_tuple, text in zip(llm_match_ranges, llm_match_texts):
+                        if range_tuple not in seen_ranges:
+                            seen_ranges.add(range_tuple)
+                            unique_ranges.append(range_tuple)
+                            unique_texts.append(text)
+
+                    char_ranges = unique_ranges
+                    extracted_evidence = "\n".join(unique_texts)
                     is_empty = False
-                    print(f"   ✅ LLM found {len(llm_match_ranges)} evidence range(s)")
+                    print(f"   ✅ LLM found {len(unique_ranges)} unique evidence range(s) (deduplicated from {len(llm_match_ranges)})")
                 else:
                     char_ranges = []
                     extracted_evidence = ""
@@ -909,33 +1051,34 @@ Evidence Range:
                 'evidences': []
             }
     
-    def query_with_answer(self, query: str, k: int = 10, relevance_threshold: float = 0.5) -> Dict[str, Any]:
-        """Complete query workflow - Retrieve top k documents, filter by semantic relevance (≥ 0.5) for high precision"""
+    def query_with_answer(self, query: str, k: int = 10, relevance_threshold: float = 0.6, similarity_threshold: float = 0.7) -> Dict[str, Any]:
+        """Complete query workflow - Retrieve top k documents, filter by semantic relevance (≥ 0.6) OR similarity score (≥ 0.7) for high precision"""
         start_time = time.time()
 
         # 1. Semantic retrieval - get top k candidate documents
         semantic_chunks = self.semantic_query(query, k)
 
-        # 2. Filter: only keep documents with high semantic relevance (≥ 0.5) for precision
+        # 2. Filter: keep documents with high semantic relevance (≥ 0.5) OR similarity score (≥ 0.7) for precision
+        # Using OR logic: accept chunks that are either semantically relevant OR have high vector similarity
         filtered_chunks = [
             chunk for chunk in semantic_chunks
-            if chunk.semantic_relevance >= relevance_threshold
+            if chunk.semantic_relevance >= relevance_threshold or chunk.similarity_score >= similarity_threshold
         ]
 
         print(f"\n🔍 Retrieval statistics:")
         print(f"  📊 Initial retrieval: {len(semantic_chunks)} documents")
-        print(f"  ✅ After filtering (relevance≥{relevance_threshold}): {len(filtered_chunks)} documents")
+        print(f"  ✅ After filtering (relevance≥{relevance_threshold} OR similarity≥{similarity_threshold}): {len(filtered_chunks)} documents")
 
         # 3. If no qualifying documents found, return apology message
         if not filtered_chunks:
             processing_time = time.time() - start_time
-            print(f"  ⚠️ No documents with relevance≥{relevance_threshold} found, returning empty result")
+            print(f"  ⚠️ No documents with relevance≥{relevance_threshold} OR similarity≥{similarity_threshold} found, returning empty result")
             return {
                 'answer': 'Sorry, no relevant information is currently available.',
                 'evidence_text': '',
                 'source_document': '',
                 'confidence': 0.0,
-                'reasoning': f'No documents with semantic relevance≥{relevance_threshold} found',
+                'reasoning': f'No documents with semantic relevance≥{relevance_threshold} OR similarity≥{similarity_threshold} found',
                 'model': 'PureSemanticRAG',
                 'processing_time': processing_time,
                 'chunks_used': 0,
@@ -948,6 +1091,55 @@ Evidence Range:
         # 5. Add processing time
         processing_time = time.time() - start_time
         result['processing_time'] = processing_time
+
+        # 6. Save to query history database (persistent storage)
+        if self.history_manager:
+            try:
+                # Save main query
+                query_id = self.history_manager.add_query(
+                    query=query,
+                    generated_answer=result['answer'],
+                    processing_time=processing_time,
+                    model=result.get('model', 'PureSemanticRAG'),
+                    confidence=result.get('confidence', 0.0),
+                    num_chunks=result.get('chunks_used', 0)
+                )
+
+                # Save evidence extraction details for each chunk
+                for evidence in result.get('evidences', []):
+                    # Extract LLM response from detailed log if available
+                    llm_raw_response = ""
+                    extraction_prompt = ""
+
+                    # Read the last matching entry from detailed log
+                    try:
+                        with open('/tmp/rag_evidence_extraction_detailed.jsonl', 'r', encoding='utf-8') as f:
+                            lines = f.readlines()
+                            for line in reversed(lines):  # Search from end
+                                log_entry = json.loads(line)
+                                if (log_entry['query'] == query and
+                                    log_entry['chunk_id'] == evidence['chunk_id']):
+                                    llm_raw_response = log_entry['llm_raw_response']
+                                    extraction_prompt = log_entry['evidence_extraction_prompt']
+                                    break
+                    except Exception as log_err:
+                        print(f"⚠️ Could not read detailed log: {log_err}")
+
+                    self.history_manager.add_evidence_extraction(
+                        query_id=query_id,
+                        chunk_id=evidence['chunk_id'],
+                        chunk_content=evidence['chunk_content'],
+                        extraction_prompt=extraction_prompt,
+                        llm_raw_response=llm_raw_response,
+                        extracted_ranges=evidence['char_ranges'],
+                        extracted_texts=[evidence['extracted_evidence']] if evidence['extracted_evidence'] else [],
+                        similarity_score=evidence['similarity_score'],
+                        semantic_relevance=evidence['semantic_relevance']
+                    )
+
+                print(f"✅ Query history saved: query_id={query_id}")
+            except Exception as hist_err:
+                print(f"⚠️ Failed to save query history: {hist_err}")
 
         return result
 

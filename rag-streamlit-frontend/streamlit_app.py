@@ -24,22 +24,32 @@ try:
     from dotenv import load_dotenv
     # Load from parent directory where .env file is located
     import os
+    import sys
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
     env_path = os.path.join(parent_dir, '.env')
     load_dotenv(env_path)
     print("✅ Environment variables loaded from .env file")
-    
+
     # Set environment variables for proper file paths instead of changing working directory
     os.environ['CHROMA_PATH'] = os.path.join(parent_dir, 'chroma')
     os.environ['DATA_PATH'] = os.path.join(parent_dir, 'data', 'single_20240229.json')
     print(f"✅ Environment variables set - CHROMA_PATH: {os.environ['CHROMA_PATH']}")
     print(f"✅ Environment variables set - DATA_PATH: {os.environ['DATA_PATH']}")
-    
-except ImportError:
-    print("⚠️ python-dotenv not available, using system environment variables")
+
+    # Import QueryHistoryManager for persistent storage
+    sys.path.insert(0, parent_dir)
+    from query_history_manager import QueryHistoryManager
+    DB_PATH = os.path.join(parent_dir, 'query_history.db')
+    HISTORY_MANAGER_AVAILABLE = True
+    print(f"✅ QueryHistoryManager imported, DB path: {DB_PATH}")
+
+except ImportError as ie:
+    print(f"⚠️ python-dotenv or QueryHistoryManager not available: {ie}")
+    HISTORY_MANAGER_AVAILABLE = False
 except Exception as e:
-    print(f"⚠️ Error loading .env file: {e}")
+    print(f"⚠️ Error loading .env file or QueryHistoryManager: {e}")
+    HISTORY_MANAGER_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -155,7 +165,59 @@ def inject_global_styles():
 def initialize_session_state():
     """Initialize session state variables"""
     if 'query_history' not in st.session_state:
-        st.session_state.query_history = []
+        # Load history from database if available
+        if HISTORY_MANAGER_AVAILABLE:
+            try:
+                manager = QueryHistoryManager(DB_PATH)
+                # Get recent queries from database
+                recent_queries = manager.get_recent_queries(limit=50)
+
+                # Convert database records to session state format
+                loaded_history = []
+                for record in recent_queries:
+                    # record format: dict with keys: id, query, generated_answer, created_at, processing_time, model, confidence, num_chunks
+                    history_item = {
+                        'query_id': record['id'],  # Store database ID for deletion
+                        'timestamp': datetime.fromisoformat(record['created_at']) if isinstance(record['created_at'], str) else datetime.fromtimestamp(record['created_at']),
+                        'query': record['query'],
+                        'answer': record['generated_answer'],
+                        'processing_time': record['processing_time'],
+                        'confidence': record['confidence'],
+                        'evidence_text': '',  # Will be loaded from evidences if needed
+                        'start_char': 0,
+                        'end_char': 0,
+                        'evidences': [],
+                        'highlighted_evidences': []
+                    }
+
+                    # Load detailed evidence data for this query
+                    query_id = record['id']
+                    evidence_records = manager.get_evidence_for_query(query_id)
+                    for ev_record in evidence_records:
+                        # ev_record: (id, query_id, chunk_id, chunk_content, extraction_prompt, llm_response,
+                        #             extracted_ranges, extracted_texts, similarity_score, semantic_relevance, created_at)
+                        evidence_item = {
+                            'chunk_id': ev_record[2],
+                            'chunk_content': ev_record[3],
+                            'extracted_evidence': '\n'.join(json.loads(ev_record[7])) if ev_record[7] else '',
+                            'char_ranges': json.loads(ev_record[6]) if ev_record[6] else [],
+                            'similarity_score': ev_record[8],
+                            'semantic_relevance': ev_record[9],
+                            'is_empty': not bool(ev_record[7])
+                        }
+                        history_item['evidences'].append(evidence_item)
+                        if not evidence_item['is_empty'] and ev_record[7]:
+                            history_item['highlighted_evidences'].extend(json.loads(ev_record[7]))
+
+                    loaded_history.append(history_item)
+
+                st.session_state.query_history = loaded_history
+                print(f"✅ Loaded {len(loaded_history)} queries from database")
+            except Exception as e:
+                print(f"⚠️ Failed to load history from database: {e}")
+                st.session_state.query_history = []
+        else:
+            st.session_state.query_history = []
     if 'settings' not in st.session_state:
         st.session_state.settings = {
             'single_timeout': AppConfig.DEFAULT_TIMEOUT,
@@ -547,11 +609,8 @@ def display_results():
                 start_pos_display = display_source_doc.index(sentence) + 1
                 end_pos_display = start_pos_display + len(sentence) - 1
                 sentence_ranges.append(f"{start_pos_display}文字目～{end_pos_display}文字目")
-
-                # For highlighting in the original source_doc (with prefix), add offset
-                start_pos_orig = start_pos_display + prefix_offset
-                end_pos_orig = end_pos_display + prefix_offset
-                char_position_ranges.append((start_pos_orig, end_pos_orig))
+                # Use display positions directly since we're working with display_source_doc
+                char_position_ranges.append((start_pos_display, end_pos_display))
 
     # Show highlighted version with RAG evidence
     st.markdown(t("**💡 根拠部分のハイライト表示:**", "**💡 Highlighted evidence:**"))
@@ -700,6 +759,13 @@ def display_results():
 
 def add_to_history(query: str, result: dict):
     """Add query and result to history"""
+    # Extract highlighted evidence texts from evidences
+    evidences = result.get('evidences', [])
+    highlighted_evidences = []
+    for evidence in evidences:
+        if not evidence.get('is_empty', True) and evidence.get('extracted_evidence'):
+            highlighted_evidences.append(evidence['extracted_evidence'])
+
     history_item = {
         'timestamp': datetime.now(),
         'query': query,
@@ -708,7 +774,9 @@ def add_to_history(query: str, result: dict):
         'confidence': result.get('confidence', 0),
         'evidence_text': result.get('evidence_text', ''),
         'start_char': result.get('start_char', 0),
-        'end_char': result.get('end_char', 0)
+        'end_char': result.get('end_char', 0),
+        'evidences': evidences,  # Store full evidences data
+        'highlighted_evidences': highlighted_evidences  # Store extracted evidence texts
     }
     st.session_state.query_history.append(history_item)
     
@@ -762,17 +830,7 @@ def query_history_interface():
             st.rerun()
     with col3:
         show_count = st.selectbox(t("表示件数", "Items to show"), [5, 10, 20, 50], index=1)
-    
-    # Performance chart
-    if len(st.session_state.query_history) > 1:
-        df_history = pd.DataFrame(st.session_state.query_history[-20:])
-        fig = px.line(
-            df_history, x='timestamp', y='processing_time',
-            title=t('処理時間の推移', 'Processing time over queries'),
-            labels={'processing_time': t('処理時間(秒)', 'Time (s)'), 'timestamp': t('時刻', 'Time')}
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
+
     # Display history
     history_to_show = st.session_state.query_history[-show_count:]
     
@@ -787,8 +845,44 @@ def query_history_interface():
                 st.write(item['query'])
                 st.markdown(t("**回答:**", "**Answer:**"))
                 st.write(item['answer'])
-                st.markdown(t("**根拠:**", "**Evidence:**"))
-                st.info(item['evidence_text'])
+
+                # Display highlighted evidence (根拠情報)
+                highlighted_evidences = item.get('highlighted_evidences', [])
+                if highlighted_evidences:
+                    st.markdown(t("**【根拠情報】:**", "**【Evidence Highlights】:**"))
+                    for idx, evidence in enumerate(highlighted_evidences, 1):
+                        st.markdown(f"**{idx}.** {evidence}")
+
+                # Display evidence chunks with highlighting
+                evidences = item.get('evidences', [])
+                if evidences:
+                    valid_evidences = [e for e in evidences if not e.get('is_empty', True)]
+                    if valid_evidences:
+                        with st.expander(t("📄 完全な根拠チャンク (黄色でハイライト表示)", "📄 Full evidence chunks (highlighted in yellow)")):
+                            for idx, evidence in enumerate(valid_evidences, 1):
+                                chunk_content = evidence.get('chunk_content', '')
+                                char_ranges = evidence.get('char_ranges', [])
+
+                                st.markdown(f"**Chunk {idx}:**")
+                                if chunk_content and char_ranges:
+                                    # Use highlight function to show evidence in yellow
+                                    highlighted_html = highlight_rag_evidence_in_source(
+                                        chunk_content,
+                                        evidence.get('extracted_evidence', ''),
+                                        char_ranges
+                                    )
+                                    st.markdown(highlighted_html, unsafe_allow_html=True)
+                                else:
+                                    st.info(chunk_content)
+                                st.markdown("---")
+                    else:
+                        # Fallback: show original evidence_text if no valid evidences
+                        with st.expander(t("📄 完全な根拠チャンク", "📄 Full evidence chunk")):
+                            st.info(item['evidence_text'])
+                else:
+                    # Fallback: show original evidence_text if no evidences data
+                    with st.expander(t("📄 完全な根拠チャンク", "📄 Full evidence chunk")):
+                        st.info(item['evidence_text'])
             
             with col2:
                 st.metric(t("処理時間", "Time"), t(f"{item['processing_time']:.2f}秒", f"{item['processing_time']:.2f}s"))
@@ -801,6 +895,31 @@ def query_history_interface():
                     if result:
                         st.session_state.last_result = result
                         st.session_state.last_query = item['query']
+                        st.rerun()
+
+                # Add delete button
+                if st.button(t("🗑️ 削除", "Delete"), key=f"delete_{i}", type="secondary"):
+                    # Delete from database if query_id exists
+                    if 'query_id' in item and HISTORY_MANAGER_AVAILABLE:
+                        try:
+                            manager = QueryHistoryManager(DB_PATH)
+                            success = manager.delete_query(item['query_id'])
+                            if success:
+                                # Remove from session state
+                                st.session_state.query_history = [
+                                    h for h in st.session_state.query_history
+                                    if h.get('query_id') != item['query_id']
+                                ]
+                                st.success(t("✅ 削除しました", "✅ Deleted successfully"))
+                                st.rerun()
+                            else:
+                                st.error(t("❌ 削除に失敗しました", "❌ Failed to delete"))
+                        except Exception as e:
+                            st.error(t(f"❌ エラー: {e}", f"❌ Error: {e}"))
+                    else:
+                        # Remove from session state only (for items without query_id)
+                        st.session_state.query_history.remove(item)
+                        st.success(t("✅ 削除しました", "✅ Deleted successfully"))
                         st.rerun()
 
 
