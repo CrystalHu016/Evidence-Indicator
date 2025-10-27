@@ -32,6 +32,113 @@ class SemanticChunk:
     metadata: Dict[str, Any]
 
 
+class CharacterMarkedPromptStrategy:
+    """
+    Character Position Marking Strategy for Evidence Extraction
+    Patent Implementation: チャンクの部分文字列としての根拠提示
+    """
+
+    @staticmethod
+    def add_character_markers(text: str, marker_interval: int = 10) -> str:
+        """Add character position markers to text every N characters"""
+        marked_text = []
+        for i, char in enumerate(text):
+            if i % marker_interval == 0 and i > 0:
+                marked_text.append(f"[{i}]")
+            marked_text.append(char)
+        return ''.join(marked_text)
+
+    @staticmethod
+    def create_evidence_extraction_prompt_with_markers(
+        query: str,
+        answer: str,
+        chunk_content: str
+    ) -> str:
+        """
+        Create evidence extraction prompt with character position markers
+        Patent Step 2: Input chunk + user query + RAG answer to LLM, output character range (M～N)
+        """
+        marked_content = CharacterMarkedPromptStrategy.add_character_markers(chunk_content, marker_interval=10)
+
+        prompt = f"""
+Task: Extract the EXACT character range (start position ～ end position) of the evidence text from the ORIGINAL document.
+
+IMPORTANT: The character positions must be counted in the ORIGINAL text (without markers), NOT in the marked text.
+
+Question: {query}
+Answer: {answer}
+
+STEP 1: Reference text WITH position markers (for visual location only):
+{marked_content}
+
+STEP 2: ORIGINAL text (use THIS to count character positions):
+{chunk_content}
+
+CRITICAL INSTRUCTIONS:
+1. Analyze the question to identify what it's asking for:
+   - "何" (what) → looking for a NAME/TERM/CONCEPT
+   - "いつ" (when) → looking for a TIME PERIOD
+   - "どこ" (where) → looking for a LOCATION
+
+2. Identify the CORE TERM from the answer that directly answers the question
+
+3. Use the MARKED text (Step 1) to visually locate where the evidence appears
+
+4. Then count the character positions in the ORIGINAL text (Step 2) to get the exact range
+
+6. CRITICAL Rules for extraction:
+   - Extract ONLY the core noun phrase that directly answers the question
+   - MUST include ALL modifiers that are part of the noun (e.g., "亜熱帯" in "亜熱帯ジェット気流")
+   - ABSOLUTELY DO NOT include:
+     * Verbs or verb phrases (である、です、します、etc.)
+     * Particles (も、が、は、を、の、etc.) UNLESS they are part of a compound noun
+     * Punctuation (。、！？) before or after the term
+     * Sentence connectors or context words
+   - Extract the MINIMAL precise term that contains the answer
+   - For "X の一種" questions, extract ONLY "X" (e.g., for "雨季の一種", extract "雨季")
+
+7. Character position counting rules:
+   - Count from position 1 (not 0) in the ORIGINAL text
+   - Include the first and last character of the term
+   - Example: "梅雨" at the start = positions 1～2 (not 0～1)
+
+8. Output format (MUST follow exactly):
+   Core Term: [the identified core term]
+   Character Range: M～N
+   Extracted Text: [the exact text from position M to N]
+
+   OR if the core term does NOT exist in the document:
+   Core Term: [the identified core term]
+   Character Range: empty
+   Extracted Text: empty
+
+Example 1:
+Question: 梅雨とは何季の一種か?
+Answer: 雨季の一種である
+
+STEP 1 - Marked text (for visual reference):
+[0]梅雨 [SEP] 梅雨（つゆ[10]、ばいう）は、北海道[20]と小笠原諸島を除く日本[30]、朝鮮半島南部、中国[40]の南部から長江流域に[50]かけての沿海部、およ[60]び台湾など、東アジア[70]の広範囲においてみら[80]れる特有の気象現象で[90]、5月から7月にかけて[100]来る曇りや雨の多い期[110]間のこと。雨季の一種[120]である。
+
+STEP 2 - Original text (for counting positions):
+梅雨 [SEP] 梅雨（つゆ、ばいう）は、北海道と小笠原諸島を除く日本、朝鮮半島南部、中国の南部から長江流域にかけての沿海部、および台湾など、東アジアの広範囲においてみられる特有の気象現象で、5月から7月にかけて来る曇りや雨の多い期間のこと。雨季の一種である。
+
+Analysis:
+- In the marked text, I can see "雨季" appears around position [110]-[120]
+- In the original text, I count: "...雨の多い期間のこと。雨季の一種である。"
+- The word "雨季" starts after "。" at position 122
+- Counting: 梅(1)雨(2)...[skip to position 122]雨(122)季(123)
+- Core term is "雨季" only, not "の一種" or "である"
+
+Core Term: 雨季
+Character Range: 122～123
+Extracted Text: 雨季
+Reasoning: The question asks "何季の一種", so extract only "雨季", excluding particles "の一種" and verb "である".
+
+Evidence Range:
+"""
+        return prompt
+
+
 class SemanticLLMRanker:
     """Pure Semantic LLM Ranking System - No hardcoded rules"""
     
@@ -767,44 +874,15 @@ class PureSemanticRAG:
             print("\n🔍 Starting evidence extraction from each chunk...")
 
             for i, chunk in enumerate(semantic_chunks, 1):
-                # Pure LLM-based evidence extraction - No hardcoded rules
+                # NEW: Character Marker Strategy for precise evidence extraction
                 import re
 
-                # Use LLM to extract evidence with semantic relevance scoring
-                evidence_range_prompt = f"""
-Task: You MUST extract the core keyword/term from the document, even if the answer is long.
-
-Question: {query}
-Answer: {answer}
-Document: {chunk.content}
-
-CRITICAL: Even if the answer is a long sentence, you MUST identify and extract the core term that directly answers the question. Do NOT output "empty" unless the document truly doesn't contain the answer.
-
-Instructions:
-1. Analyze the question to identify what it's asking for:
-   - "何" (what) → looking for a NAME/TERM/CONCEPT
-   - "いつ" (when) → looking for a TIME PERIOD
-   - "どこ" (where) → looking for a LOCATION
-
-2. From the answer, identify the CORE TERM that answers the question, make the term as precise as possible.
-
-3. Find that core term which has the highest semantic relevance in the document and extract it
-
-4. CRITICAL RULES for noun phrase extraction:
-   - MUST include ALL modifiers (e.g., "亜熱帯" in "亜熱帯ジェット気流")
-   - Do NOT include verbs or particles (も、が、は、を、北上し、覆っている, etc.)
-   - Extract the COMPLETE noun phrase, not a fragment
-
-5. Output format (MUST follow this exact format):
-   Core Term: [the identified core term]
-   Character Range: character M～character N (where M is start position, N is end position)
-
-   OR if core term does NOT exist in document:
-   Core Term: [the identified core term]
-   Character Range: empty
-
-Evidence Range:
-"""
+                # Use CharacterMarkedPromptStrategy for improved accuracy
+                evidence_range_prompt = CharacterMarkedPromptStrategy.create_evidence_extraction_prompt_with_markers(
+                    query=query,
+                    answer=answer,
+                    chunk_content=chunk.content
+                )
 
                 llm_match_ranges = []
                 llm_match_texts = []
