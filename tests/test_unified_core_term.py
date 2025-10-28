@@ -4,7 +4,12 @@ Test unified core term extraction - ensures all chunks use the same core term
 """
 import sys
 import os
-sys.path.insert(0, './script')
+
+# Add parent directory and script directory to path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+script_dir = os.path.join(parent_dir, 'script')
+sys.path.insert(0, script_dir)
 
 from ultra_fast_rag_semantic import PureSemanticRAG
 
@@ -17,9 +22,12 @@ def test_unified_core_term():
         print("❌ OPENAI_API_KEY not set")
         return
 
-    # Initialize RAG
+    # Initialize RAG (use absolute path from project root)
     print("Initializing RAG system...")
-    rag = PureSemanticRAG(openai_api_key=api_key, chroma_path='./chroma_semantic')
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    chroma_path = os.path.join(project_root, 'chroma_semantic')
+    rag = PureSemanticRAG(openai_api_key=api_key, chroma_path=chroma_path)
 
     # Test query
     query = '初夏に入った5月ごろ、北上する気流は何か？'
