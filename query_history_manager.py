@@ -56,6 +56,7 @@ class QueryHistoryManager:
                 extracted_texts TEXT,
                 similarity_score REAL,
                 semantic_relevance REAL,
+                core_term TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (query_id) REFERENCES query_history(id)
             )
@@ -88,6 +89,15 @@ class QueryHistoryManager:
             CREATE INDEX IF NOT EXISTS idx_evidence_query_id
             ON evidence_extraction(query_id)
         """)
+
+        # Migration: Add core_term column if it doesn't exist
+        try:
+            cursor.execute("SELECT core_term FROM evidence_extraction LIMIT 1")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            print("🔧 Migrating database: Adding core_term column to evidence_extraction table...")
+            cursor.execute("ALTER TABLE evidence_extraction ADD COLUMN core_term TEXT")
+            print("✅ Migration completed: core_term column added")
 
         conn.commit()
         conn.close()

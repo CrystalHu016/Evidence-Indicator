@@ -701,7 +701,9 @@ def display_results():
 
         # Display ground truth answer ranges
         if original_answer_ranges:
-            gt_ranges_text = "、".join(original_answer_ranges)
+            # Remove duplicates while preserving order
+            unique_ranges = list(dict.fromkeys(original_answer_ranges))
+            gt_ranges_text = "、".join(unique_ranges)
             st.markdown(t(f"**📍 元データセット答案范围:** {gt_ranges_text}",
                          f"**📍 Ground truth answer ranges:** {gt_ranges_text}"))
 

@@ -138,6 +138,116 @@ Evidence Range:
 """
         return prompt
 
+    @staticmethod
+    def create_evidence_extraction_prompt_variant(
+        query: str,
+        answer: str,
+        chunk_content: str
+    ) -> str:
+        """
+        Variant method (変形例): LLM extracts the text string directly, not position numbers
+        処理2': Extract evidence text string
+        処理3': Check exact match
+        処理4': Use edit distance to find most similar substring
+        """
+        prompt = f"""
+Task: Extract the evidence text string that supports the answer from the chunk.
+
+Question: {query}
+Answer: {answer}
+Chunk: {chunk_content}
+
+CRITICAL INSTRUCTIONS:
+1. Analyze what the question is asking for:
+   - "何" (what) → Extract a NAME/TERM/CONCEPT
+   - "いつ" (when) → Extract a TIME PERIOD
+   - "どこ" (where) → Extract a LOCATION
+
+2. From the answer, identify the CORE TERM that directly answers the question
+
+3. Extract ONLY that core term from the chunk
+   - DO NOT include particles (の、が、は、を、も)
+   - DO NOT include verbs (である、です、します)
+   - DO NOT include extra context words
+   - Extract the MINIMAL precise term
+
+4. The extracted text MUST exist exactly in the chunk
+
+Output format:
+Core Term: [the identified core term]
+Evidence Text: [the exact text extracted from chunk]
+
+If the core term does NOT exist in the chunk:
+Core Term: [the identified core term]
+Evidence Text: empty
+
+Example 1:
+Question: 梅雨とは何季の一種か?
+Answer: 雨季の一種である
+Chunk: 梅雨（つゆ、ばいう）は...雨季の一種である。
+
+Analysis:
+- Question asks "何季" → looking for a TYPE OF SEASON
+- Answer contains "雨季の一種" → core term is "雨季"
+- Find "雨季" in chunk → exists
+
+Core Term: 雨季
+Evidence Text: 雨季
+
+Example 2:
+Question: 初夏に入った5月ごろ、北上する気流は何か？
+Answer: 亜熱帯ジェット気流が北上します。
+Chunk: 一方、初夏に入った5月ごろ、亜熱帯ジェット気流も北上し...
+
+Analysis:
+- Question asks "気流は何か" → looking for NAME OF AIR CURRENT
+- Answer contains "亜熱帯ジェット気流" → this is the core term
+- Find "亜熱帯ジェット気流" in chunk → exists
+
+Core Term: 亜熱帯ジェット気流
+Evidence Text: 亜熱帯ジェット気流
+
+Now extract the evidence:
+"""
+        return prompt
+
+    @staticmethod
+    def find_most_similar_substring(chunk: str, target: str, min_length: int = 2) -> tuple:
+        """
+        処理4': Find most similar substring in chunk using edit distance
+        机械的に抽出する（※LLMは使わない）
+
+        Args:
+            chunk: Original chunk text
+            target: Target text from LLM (may have hallucination)
+            min_length: Minimum substring length to consider
+
+        Returns:
+            (best_match, (start, end), similarity_score)
+        """
+        from difflib import SequenceMatcher
+
+        best_match = ""
+        best_score = 0.0
+        best_range = (0, 0)
+
+        target_len = len(target)
+
+        # Search for substrings with similar length to target
+        for length in range(max(min_length, target_len - 5), min(len(chunk) + 1, target_len + 10)):
+            for i in range(len(chunk) - length + 1):
+                substring = chunk[i:i + length]
+
+                # Calculate similarity using SequenceMatcher (edit distance)
+                score = SequenceMatcher(None, substring, target).ratio()
+
+                if score > best_score:
+                    best_score = score
+                    best_match = substring
+                    best_range = (i + 1, i + length)  # 1-based indexing
+
+        return best_match, best_range, best_score
+
 
 class SemanticLLMRanker:
     """Pure Semantic LLM Ranking System - No hardcoded rules"""
@@ -869,16 +979,58 @@ class PureSemanticRAG:
             response = self.llm.invoke(answer_prompt)
             answer = response.content.strip()
 
+            # 🎯 STEP 1: Extract unified core term from the generated answer (ONE TIME ONLY)
+            import re
+            print("\n🎯 STEP 1: Extracting unified core term from generated answer...")
+
+            core_term_extraction_prompt = f"""
+Task: Identify the CORE TERM that directly answers the question from the generated answer.
+
+Question: {query}
+Generated Answer: {answer}
+
+CRITICAL INSTRUCTIONS:
+1. Analyze what the question is asking for:
+   - "何" (what) → Extract a NAME/TERM/CONCEPT
+   - "いつ" (when) → Extract a TIME PERIOD
+   - "どこ" (where) → Extract a LOCATION
+
+2. From the generated answer, identify the SINGLE CORE TERM that directly answers the question
+   - DO NOT include particles (の、が、は、を、も)
+   - DO NOT include verbs (である、です、します、が、も)
+   - Extract the MINIMAL precise term
+
+3. Output ONLY the core term, nothing else
+
+Example 1:
+Question: 梅雨とは何季の一種か?
+Answer: 雨季の一種である
+Core Term: 雨季
+
+Example 2:
+Question: 初夏に入った5月ごろ、北上する気流は何か？
+Answer: 亜熱帯ジェット気流が北上します。
+Core Term: 亜熱帯ジェット気流
+
+Now identify the core term:
+"""
+
+            try:
+                core_term_response = self.llm.invoke(core_term_extraction_prompt)
+                unified_core_term = core_term_response.content.strip()
+                print(f"   ✅ Unified core term identified: '{unified_core_term}'")
+            except Exception as e:
+                print(f"   ⚠️ Failed to extract core term: {e}")
+                unified_core_term = ""
+
             # Strategy 3 core: Extract evidence from each chunk separately
             evidences = []
-            print("\n🔍 Starting evidence extraction from each chunk...")
+            print("\n🔍 STEP 2: Searching for unified core term in each chunk...")
 
             for i, chunk in enumerate(semantic_chunks, 1):
-                # NEW: Character Marker Strategy for precise evidence extraction
-                import re
-
-                # Use CharacterMarkedPromptStrategy for improved accuracy
-                evidence_range_prompt = CharacterMarkedPromptStrategy.create_evidence_extraction_prompt_with_markers(
+                # 変形例: LLM extracts text string directly, then we find position
+                # 処理2': Use variant prompt to extract text string
+                evidence_variant_prompt = CharacterMarkedPromptStrategy.create_evidence_extraction_prompt_variant(
                     query=query,
                     answer=answer,
                     chunk_content=chunk.content
@@ -886,34 +1038,54 @@ class PureSemanticRAG:
 
                 llm_match_ranges = []
                 llm_match_texts = []
-                core_term = ""  # Store the identified core term
+                core_term = unified_core_term  # Use the unified core term for all chunks
 
                 try:
-                    evidence_response = self.llm.invoke(evidence_range_prompt)
-                    range_output = evidence_response.content.strip()
+                    evidence_response = self.llm.invoke(evidence_variant_prompt)
+                    variant_output = evidence_response.content.strip()
 
-                    # Extract core term from the response
-                    core_term_match = re.search(r'Core Term:\s*(.+?)(?:\n|$)', range_output, re.IGNORECASE)
+                    # Extract core term and evidence text from response
+                    core_term_match = re.search(r'Core Term:\s*(.+?)(?:\n|$)', variant_output, re.IGNORECASE)
+                    evidence_text_match = re.search(r'Evidence Text:\s*(.+?)(?:\n|$)', variant_output, re.IGNORECASE)
+
                     if core_term_match:
-                        core_term = core_term_match.group(1).strip()
-                        print(f"   🎯 Identified core term: '{core_term}'")
+                        llm_identified_term = core_term_match.group(1).strip()
+                        print(f"   📝 LLM identified in chunk: '{llm_identified_term}' (using unified: '{unified_core_term}')")
 
-                    if range_output.lower() != "empty" and range_output != "":
-                        # Parse ranges - support both English and Japanese format
-                        range_pattern = r'(?:character\s+)?(\d+)(?:文字目)?～(?:character\s+)?(\d+)(?:文字目)?'
-                        matches = re.findall(range_pattern, range_output)
+                    if evidence_text_match:
+                        evidence_text = evidence_text_match.group(1).strip()
+                    else:
+                        evidence_text = ""
 
-                        for start_str, end_str in matches:
-                            start = int(start_str)
-                            end = int(end_str)
+                    if evidence_text and evidence_text.lower() != "empty":
+                        # 処理3': Check exact match in chunk
+                        if evidence_text in chunk.content:
+                            # Exact match found! Find position
+                            match_pos = chunk.content.find(evidence_text)
+                            start = match_pos + 1  # 1-based
+                            end = match_pos + len(evidence_text)
+                            llm_match_ranges.append((start, end))
+                            llm_match_texts.append(evidence_text)
+                            print(f"   ✅ 処理3': Exact match found: '{evidence_text}' ({start}～{end})")
+                        else:
+                            # 処理4': No exact match - use edit distance to find similar substring
+                            print(f"   ⚠️ 処理3': No exact match for '{evidence_text}'")
+                            print(f"   🔧 処理4': Finding most similar substring...")
 
-                            if 1 <= start <= len(chunk.content) and start <= end <= len(chunk.content):
-                                substring = chunk.content[start-1:end]
-                                llm_match_ranges.append((start, end))
-                                llm_match_texts.append(substring)
-                                print(f"   ✓ LLM extraction: {start}～{end} ('{substring}')")
+                            best_match, best_range, similarity = CharacterMarkedPromptStrategy.find_most_similar_substring(
+                                chunk.content,
+                                evidence_text
+                            )
+
+                            if best_match and similarity > 0.6:  # Threshold for accepting match
+                                llm_match_ranges.append(best_range)
+                                llm_match_texts.append(best_match)
+                                print(f"   ✅ 処理4': Found similar: '{best_match}' ({best_range[0]}～{best_range[1]}, similarity={similarity:.2f})")
+                            else:
+                                print(f"   ❌ 処理4': No similar substring found (similarity={similarity:.2f})")
+
                 except Exception as llm_e:
-                    print(f"   ⚠️ LLM extraction failed: {llm_e}")
+                    print(f"   ⚠️ Evidence extraction failed: {llm_e}")
 
                 # Use LLM results
                 if llm_match_ranges:
@@ -946,8 +1118,8 @@ class PureSemanticRAG:
                     'similarity_score': float(chunk.similarity_score),
                     'semantic_relevance': float(chunk.semantic_relevance),
                     'is_empty': is_empty,
-                    'evidence_range_prompt': evidence_range_prompt,  # Store the prompt used for extraction
-                    'llm_response': range_output,  # Store the LLM raw response
+                    'evidence_variant_prompt': evidence_variant_prompt,  # Store the prompt used for extraction
+                    'llm_response': variant_output,  # Store the LLM raw response
                     'core_term': core_term  # Store the identified core term
                 }
 
