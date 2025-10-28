@@ -199,7 +199,7 @@ def initialize_session_state():
                         evidence_item = {
                             'chunk_id': ev_record[2],
                             'chunk_content': ev_record[3],
-                            'evidence_range_prompt': ev_record[4],  # Store the evidence range prompt
+                            'evidence_variant_prompt': ev_record[4],  # Store the evidence extraction prompt (variant method)
                             'llm_response': ev_record[5],  # Store the LLM response
                             'extracted_evidence': '\n'.join(json.loads(ev_record[7])) if ev_record[7] else '',
                             'char_ranges': json.loads(ev_record[6]) if ev_record[6] else [],
@@ -804,7 +804,7 @@ def add_to_history(query: str, result: dict):
                     query_id=query_id,
                     chunk_id=evidence.get('chunk_id', 0),
                     chunk_content=evidence.get('chunk_content', ''),
-                    extraction_prompt=evidence.get('evidence_range_prompt', ''),
+                    extraction_prompt=evidence.get('evidence_variant_prompt', '') or evidence.get('evidence_range_prompt', ''),
                     llm_raw_response=evidence.get('llm_response', ''),
                     extracted_ranges=evidence.get('char_ranges', []),
                     extracted_texts=[evidence.get('extracted_evidence', '')] if evidence.get('extracted_evidence') else [],
@@ -1001,7 +1001,8 @@ def query_history_interface():
                         # Add extraction prompt expander
                         with st.expander(t("🔍 Extraction Prompt Instructions", "🔍 Extraction Prompt Instructions")):
                             for idx, evidence in enumerate(valid_evidences, 1):
-                                extraction_prompt = evidence.get('evidence_range_prompt', '')
+                                # Try variant prompt first (new), fallback to range prompt (old)
+                                extraction_prompt = evidence.get('evidence_variant_prompt', '') or evidence.get('evidence_range_prompt', '')
                                 llm_response = evidence.get('llm_response', '')
 
                                 if extraction_prompt:
