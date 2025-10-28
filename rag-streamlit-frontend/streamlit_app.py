@@ -661,6 +661,7 @@ def display_results():
         original_answer = source_doc[answer_start:answer_end].strip()
 
     # Try to load ground truth answer positions from JSQuAD dataset
+    original_answers_with_ranges = []  # Store all answers with their ranges
     try:
         import json
         import os
@@ -678,13 +679,24 @@ def display_results():
                     answer_starts = item['answers']['answer_start']
                     answer_texts = item['answers']['text']
 
-                    # Convert to ranges (start to end positions)
+                    # Store each answer with its range
+                    seen_answers = set()  # Track (text, range) pairs to avoid duplicates
                     for i, start_pos in enumerate(answer_starts):
                         if i < len(answer_texts):
                             answer_text = answer_texts[i]
                             end_pos = start_pos + len(answer_text)
                             # Convert to 1-based display format (add 1 to start_pos since dataset is 0-based)
-                            original_answer_ranges.append(f"{start_pos + 1}文字目～{end_pos}文字目")
+                            range_str = f"{start_pos + 1}文字目～{end_pos}文字目"
+
+                            # Check for duplicates (same text and same range)
+                            answer_key = (answer_text, range_str)
+                            if answer_key not in seen_answers:
+                                seen_answers.add(answer_key)
+                                original_answer_ranges.append(range_str)
+                                original_answers_with_ranges.append({
+                                    'text': answer_text,
+                                    'range': range_str
+                                })
 
                     # Use the first ground truth answer if not already found
                     if not original_answer and answer_texts:
@@ -694,18 +706,20 @@ def display_results():
     except Exception as e:
         print(f"⚠️ Could not load ground truth positions: {e}")
 
-    # Display original dataset answer
-    if original_answer:
-        st.markdown(t("**📋 元のデータセット回答:**", "**📋 Original dataset answer:**"))
-        st.info(original_answer)
+    # Display original dataset answers with their ranges
+    if original_answers_with_ranges:
+        st.markdown(t("**📋 元のデータセット回答:**", "**📋 Original dataset answer(s):**"))
 
-        # Display ground truth answer ranges
-        if original_answer_ranges:
-            # Remove duplicates while preserving order
-            unique_ranges = list(dict.fromkeys(original_answer_ranges))
-            gt_ranges_text = "、".join(unique_ranges)
-            st.markdown(t(f"**📍 元データセット答案范围:** {gt_ranges_text}",
-                         f"**📍 Ground truth answer ranges:** {gt_ranges_text}"))
+        # Display each answer with its corresponding range
+        for idx, answer_info in enumerate(original_answers_with_ranges, 1):
+            if len(original_answers_with_ranges) > 1:
+                st.markdown(f"**回答 {idx}:** {answer_info['text']}")
+                st.markdown(f"  └─ **位置:** {answer_info['range']}")
+            else:
+                # Single answer - simpler display
+                st.info(answer_info['text'])
+                st.markdown(t(f"**📍 元データセット回答の位置:** {answer_info['range']}",
+                             f"**📍 Ground truth answer range:** {answer_info['range']}"))
 
     # Evidence information - use display_evidence (extracted evidence, not full chunk)
     evidence_text = result.get('evidence_text', '根拠情報なし')
@@ -751,6 +765,45 @@ def display_results():
     else:
         # Should not use evidence_text here, use display_evidence instead
         st.info(display_evidence if display_evidence else evidence_text)
+
+    # Display chunks with highlighting
+    if valid_evidences:
+        st.markdown(t("### 【チャンクと根拠情報のハイライト表示】", "### Chunks with Evidence Highlighting"))
+        st.markdown(t("*チャンク内で抽出された根拠情報を黄色でハイライト表示します*",
+                     "*Extracted evidence is highlighted in yellow within each chunk*"))
+
+        for idx, evidence in enumerate(valid_evidences, 1):
+            chunk_content = evidence.get('chunk_content', '')
+            char_ranges = evidence.get('char_ranges', [])
+            extracted_evidence = evidence.get('extracted_evidence', '')
+
+            st.markdown(f"**Chunk {idx}:**")
+
+            if chunk_content and char_ranges:
+                # Use highlight function to show evidence in yellow
+                highlighted_html = highlight_rag_evidence_in_source(
+                    chunk_content,
+                    extracted_evidence,
+                    char_ranges
+                )
+                st.markdown(highlighted_html, unsafe_allow_html=True)
+            elif chunk_content:
+                # Fallback: show chunk without highlighting
+                st.info(chunk_content)
+
+            # Show metadata for this chunk
+            with st.expander(t(f"📊 Chunk {idx} メタデータ", f"📊 Chunk {idx} Metadata")):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(t("類似度スコア", "Similarity"), f"{evidence.get('similarity_score', 0):.3f}")
+                with col2:
+                    st.metric(t("セマンティック関連度", "Semantic Relevance"), f"{evidence.get('semantic_relevance', 0):.3f}")
+                with col3:
+                    core_term = evidence.get('core_term', '')
+                    if core_term:
+                        st.write(f"**{t('コアターム', 'Core Term')}:** {core_term}")
+
+            st.markdown("---")
 
     # Additional metadata
     if st.session_state.settings.get('show_technical_details', True):
