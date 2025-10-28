@@ -870,8 +870,15 @@ def query_history_interface():
         st.info(t("まだ履歴がありません。", "No history yet."))
         return
     
+    # Sort history by timestamp (newest first)
+    sorted_history = sorted(
+        st.session_state.query_history,
+        key=lambda x: x.get('timestamp', datetime.now()),
+        reverse=True
+    )
+
     # History controls
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button(t("📊 履歴をエクスポート", "Export history")):
             export_history()
@@ -881,12 +888,67 @@ def query_history_interface():
             st.success(t("履歴をクリアしました！", "History cleared!"))
             st.rerun()
     with col3:
-        show_count = st.selectbox(t("表示件数", "Items to show"), [5, 10, 20, 50], index=1)
+        items_per_page = st.selectbox(
+            t("表示件数/ページ", "Items per page"),
+            [5, 10, 20, 50],
+            index=1
+        )
 
-    # Display history
-    history_to_show = st.session_state.query_history[-show_count:]
-    
-    for i, item in enumerate(reversed(history_to_show), 1):
+    # Calculate total pages
+    total_items = len(sorted_history)
+    total_pages = (total_items + items_per_page - 1) // items_per_page  # Ceiling division
+
+    # Initialize current page in session state
+    if 'history_current_page' not in st.session_state:
+        st.session_state.history_current_page = 1
+
+    # Reset to page 1 if items_per_page changes
+    if 'history_items_per_page' not in st.session_state:
+        st.session_state.history_items_per_page = items_per_page
+    elif st.session_state.history_items_per_page != items_per_page:
+        st.session_state.history_items_per_page = items_per_page
+        st.session_state.history_current_page = 1
+
+    with col4:
+        st.markdown(f"**{t('合計', 'Total')}: {total_items} {t('件', 'items')}**")
+
+    # Pagination controls
+    if total_pages > 1:
+        st.markdown("---")
+        page_col1, page_col2, page_col3, page_col4, page_col5 = st.columns([1, 1, 2, 1, 1])
+
+        with page_col1:
+            if st.button("⏮️ " + t("最初", "First"), disabled=(st.session_state.history_current_page == 1)):
+                st.session_state.history_current_page = 1
+                st.rerun()
+
+        with page_col2:
+            if st.button("◀️ " + t("前", "Prev"), disabled=(st.session_state.history_current_page == 1)):
+                st.session_state.history_current_page -= 1
+                st.rerun()
+
+        with page_col3:
+            st.markdown(f"<div style='text-align: center; padding-top: 8px;'><b>{t('ページ', 'Page')} {st.session_state.history_current_page} / {total_pages}</b></div>", unsafe_allow_html=True)
+
+        with page_col4:
+            if st.button(t("次", "Next") + " ▶️", disabled=(st.session_state.history_current_page >= total_pages)):
+                st.session_state.history_current_page += 1
+                st.rerun()
+
+        with page_col5:
+            if st.button(t("最後", "Last") + " ⏭️", disabled=(st.session_state.history_current_page >= total_pages)):
+                st.session_state.history_current_page = total_pages
+                st.rerun()
+
+    # Calculate items for current page
+    start_idx = (st.session_state.history_current_page - 1) * items_per_page
+    end_idx = min(start_idx + items_per_page, total_items)
+    history_to_show = sorted_history[start_idx:end_idx]
+
+    st.markdown("---")
+
+    # Display history items
+    for i, item in enumerate(history_to_show, start=start_idx + 1):
         timestamp_str = item['timestamp'].strftime("%Y-%m-%d %H:%M:%S")
         
         with st.expander(f"{i}. {item['query'][:60]}... ({timestamp_str})"):
