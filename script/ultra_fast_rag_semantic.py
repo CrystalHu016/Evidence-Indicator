@@ -151,7 +151,7 @@ Evidence Range:
         処理4': Use edit distance to find most similar substring
         """
         prompt = f"""
-Task: Extract the evidence text string that supports the answer from the chunk.
+Task: Extract the MINIMAL evidence text string that directly answers the question from the chunk.
 
 Question: {query}
 Answer: {answer}
@@ -166,16 +166,23 @@ CRITICAL INSTRUCTIONS:
 2. From the answer, identify the CORE TERM that directly answers the question
 
 3. Extract ONLY that core term from the chunk
-   - DO NOT include particles (の、が、は、を、も)
-   - DO NOT include verbs (である、です、します)
-   - DO NOT include extra context words
-   - Extract the MINIMAL precise term
+   - Extract the SHORTEST possible text that contains the answer
+   - DO NOT include particles (の、が、は、を、も、に、と、で、から) UNLESS they are part of a compound noun
+   - DO NOT include verbs (である、です、します、とされる、といい、etc.)
+   - DO NOT include explanatory phrases or context
+   - DO NOT include punctuation before/after the term
+   - MAXIMUM length: prefer single terms or short phrases 
+   - If the answer spans multiple parts of text, extract ONLY the most direct part
 
 4. The extracted text MUST exist exactly in the chunk
 
+5. CRITICAL: For complex answers, extract ONLY the core answer term, NOT the entire explanation
+   - Example: If answer is "田植えの時期の目安とされている", extract ONLY "田植えの時期の目安" or "田植えの時期"
+   - Example: If answer is "春の終わりであり夏の始まり", this may be too long - try to find the most direct term in chunk
+
 Output format:
 Core Term: [the identified core term]
-Evidence Text: [the exact text extracted from chunk]
+Evidence Text: [the exact SHORT text extracted from chunk]
 
 If the core term does NOT exist in the chunk:
 Core Term: [the identified core term]
@@ -194,18 +201,21 @@ Analysis:
 Core Term: 雨季
 Evidence Text: 雨季
 
+
 Example 2:
-Question: 初夏に入った5月ごろ、北上する気流は何か？
-Answer: 亜熱帯ジェット気流が北上します。
-Chunk: 一方、初夏に入った5月ごろ、亜熱帯ジェット気流も北上し...
+Question: 入梅は何の目安の時期か？
+Answer: 入梅は田植えの時期の目安とされている。
+Chunk: ...暦の上ではこの日を入梅とするが、これは水を必要とする田植えの時期の目安とされている。
 
 Analysis:
-- Question asks "気流は何か" → looking for NAME OF AIR CURRENT
-- Answer contains "亜熱帯ジェット気流" → this is the core term
-- Find "亜熱帯ジェット気流" in chunk → exists
+- Question asks "何の目安の時期" → looking for PURPOSE/USAGE
+- Answer contains "田植えの時期の目安" → this is the core term
+- Find "田植えの時期の目安" in chunk → exists (9 characters)
+- DO NOT extract the full sentence "入梅（にゅうばい）といい、社会通念上・気象学上は..." (too long!)
+- Extract ONLY the direct answer term
 
-Core Term: 亜熱帯ジェット気流
-Evidence Text: 亜熱帯ジェット気流
+Core Term: 田植えの時期の目安
+Evidence Text: 田植えの時期の目安
 
 Now extract the evidence:
 """
