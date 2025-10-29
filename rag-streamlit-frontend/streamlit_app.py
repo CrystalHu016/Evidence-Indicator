@@ -181,6 +181,7 @@ def initialize_session_state():
                         'timestamp': datetime.fromisoformat(record['created_at']) if isinstance(record['created_at'], str) else datetime.fromtimestamp(record['created_at']),
                         'query': record['query'],
                         'answer': record['generated_answer'],
+                        'dataset_answer': record.get('dataset_answer', ''),  # Load dataset answer from database
                         'processing_time': record['processing_time'],
                         'confidence': record['confidence'],
                         'evidence_text': '',  # Will be loaded from evidences if needed
@@ -1012,6 +1013,11 @@ def query_history_interface():
                 st.write(item['query'])
                 st.markdown(t("**回答:**", "**Answer:**"))
                 st.write(item['answer'])
+
+                # Display dataset answer if available
+                if item.get('dataset_answer'):
+                    st.markdown(t("**📋 元のデータセット回答:**", "**📋 Original Dataset Answer:**"))
+                    st.info(item['dataset_answer'])
 
                 # Display identified core terms
                 item_evidences = item.get('evidences', [])
