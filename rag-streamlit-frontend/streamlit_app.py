@@ -206,7 +206,7 @@ def initialize_session_state():
                             'similarity_score': ev_record[8],
                             'semantic_relevance': ev_record[9],
                             'is_empty': not bool(ev_record[7]),
-                            'core_term': ev_record[11] if len(ev_record) > 11 else ''  # Load core term if available
+                            'core_term': ev_record[10] if len(ev_record) > 10 else ''  # Load core term (index 10: core_term, index 11: created_at)
                         }
                         history_item['evidences'].append(evidence_item)
                         if not evidence_item['is_empty'] and ev_record[7]:
