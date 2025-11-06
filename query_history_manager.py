@@ -111,7 +111,8 @@ class QueryHistoryManager:
         processing_time: float,
         model: str = "PureSemanticRAG",
         confidence: float = 0.0,
-        num_chunks: int = 0
+        num_chunks: int = 0,
+        dataset_answer: str = ""
     ) -> int:
         """Add a new query to history
 
@@ -122,6 +123,7 @@ class QueryHistoryManager:
             model: Model name used
             confidence: Confidence score
             num_chunks: Number of chunks used
+            dataset_answer: Ground truth answer from dataset (optional)
 
         Returns:
             query_id: ID of the inserted query record
@@ -133,9 +135,9 @@ class QueryHistoryManager:
 
         cursor.execute("""
             INSERT INTO query_history
-            (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks))
+            (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks, dataset_answer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks, dataset_answer))
 
         query_id = cursor.lastrowid
         conn.commit()

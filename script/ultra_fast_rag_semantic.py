@@ -435,12 +435,18 @@ class PureSemanticRAG:
         # Semantic ranking system
         self.semantic_ranker = SemanticLLMRanker(openai_api_key)
 
+        # BM25 retriever for keyword-based search (initialized on first use)
+        self.bm25_retriever = None
+        self.all_documents = None
+
         # Configuration - Balanced for accuracy and recall
         self.config = {
             'similarity_threshold': 0.2,
             'max_candidates': 8,  # Increased to 8 for better recall (find more candidate chunks)
             'use_query_expansion': True,  # Keep query expansion to ensure recall
-            'use_semantic_ranking': True
+            'use_semantic_ranking': True,
+            'use_hybrid_search': True,  # Enable hybrid search (BM25 + Vector)
+            'hybrid_alpha': 0.5  # Weight for combining BM25 (1-alpha) and Vector (alpha) scores
         }
 
     def build_vector_store(self, data_file: str, chunk_size: int = 200, chunk_overlap: int = 50) -> bool:
@@ -601,31 +607,170 @@ class PureSemanticRAG:
         except Exception as e:
             print(f"❌ Pure semantic vector store build failed: {e}")
             return False
-    
+
+    def _initialize_bm25(self):
+        """Initialize BM25 retriever from ChromaDB documents"""
+        if self.bm25_retriever is not None:
+            return  # Already initialized
+
+        if not self.db:
+            print("⚠️ Cannot initialize BM25: No database loaded")
+            return
+
+        try:
+            # Get all documents from ChromaDB
+            collection = self.db._collection
+            all_results = collection.get()
+
+            # Store documents for later retrieval
+            self.all_documents = []
+            texts = []
+
+            for i, doc_text in enumerate(all_results['documents']):
+                metadata = all_results['metadatas'][i] if all_results['metadatas'] else {}
+                self.all_documents.append({
+                    'text': doc_text,
+                    'metadata': metadata,
+                    'index': i
+                })
+                texts.append(doc_text)
+
+            # Initialize BM25 with langchain's BM25Retriever
+            try:
+                from langchain_community.retrievers import BM25Retriever
+            except ImportError:
+                from langchain.retrievers import BM25Retriever
+            from langchain.schema import Document as LangChainDoc
+
+            # Japanese tokenizer for BM25
+            try:
+                import MeCab
+                mecab = MeCab.Tagger()
+
+                def japanese_tokenizer(text):
+                    """Tokenize Japanese text using MeCab"""
+                    try:
+                        node = mecab.parseToNode(text)
+                        tokens = []
+                        while node:
+                            if node.surface:
+                                tokens.append(node.surface)
+                            node = node.next
+                        return tokens
+                    except:
+                        # Fallback: character-based tokenization
+                        return list(text)
+
+                print("✅ Using MeCab for Japanese tokenization")
+                tokenizer_func = japanese_tokenizer
+            except ImportError:
+                print("⚠️ MeCab not available, using character-based tokenization")
+                # Fallback: simple character-level tokenization for Japanese
+                tokenizer_func = lambda text: list(text.replace(' ', ''))
+
+            docs = [LangChainDoc(page_content=doc['text'], metadata=doc['metadata'])
+                    for doc in self.all_documents]
+
+            self.bm25_retriever = BM25Retriever.from_documents(
+                docs,
+                preprocess_func=tokenizer_func
+            )
+            self.bm25_retriever.k = self.config['max_candidates']
+
+            print(f"✅ BM25 retriever initialized with {len(texts)} documents")
+
+        except Exception as e:
+            print(f"⚠️ BM25 initialization failed: {e}")
+            self.bm25_retriever = None
+
+    def _hybrid_search(self, query: str, k: int) -> List[Dict]:
+        """Perform hybrid search combining BM25 and vector search"""
+        # Initialize BM25 if not already done
+        if self.bm25_retriever is None:
+            self._initialize_bm25()
+
+        alpha = self.config.get('hybrid_alpha', 0.5)
+
+        # 1. Vector search
+        vector_results = self.db.similarity_search_with_score(query, k=k*2)
+        vector_candidates = {}
+        for doc, score in vector_results:
+            doc_id = doc.page_content[:100]  # Use first 100 chars as ID
+            vector_candidates[doc_id] = {
+                'document': doc,
+                'vector_score': score,
+                'bm25_score': 0.0
+            }
+
+        # 2. BM25 search
+        if self.bm25_retriever:
+            bm25_results = self.bm25_retriever.get_relevant_documents(query)[:k*2]
+            for doc in bm25_results:
+                doc_id = doc.page_content[:100]
+                if doc_id in vector_candidates:
+                    # Document found in both searches - update BM25 score
+                    vector_candidates[doc_id]['bm25_score'] = 1.0
+                else:
+                    # Document only found in BM25
+                    vector_candidates[doc_id] = {
+                        'document': doc,
+                        'vector_score': 0.5,  # Default moderate vector score
+                        'bm25_score': 1.0
+                    }
+
+        # 3. Combine scores using weighted average
+        combined_results = []
+        for doc_id, scores in vector_candidates.items():
+            # Normalize vector score (lower is better, so invert)
+            normalized_vector = 1.0 - min(scores['vector_score'], 1.0)
+
+            # Combined score: alpha * vector + (1-alpha) * bm25
+            combined_score = alpha * normalized_vector + (1 - alpha) * scores['bm25_score']
+
+            combined_results.append({
+                'document': scores['document'],
+                'similarity_score': scores['vector_score'],
+                'combined_score': combined_score,
+                'source_query': query
+            })
+
+        # Sort by combined score (higher is better)
+        combined_results.sort(key=lambda x: x['combined_score'], reverse=True)
+
+        return combined_results[:k]
+
     def semantic_query(self, query: str, k: int = 3) -> List[SemanticChunk]:
         """Pure semantic query - Fully based on LLM understanding"""
         if not self.db:
             return []
 
-        print(f"🔍 Pure semantic query: {query}")
+        use_hybrid = self.config.get('use_hybrid_search', False)
+        search_method = "🔀 Hybrid (BM25 + Vector)" if use_hybrid else "🔍 Pure semantic"
+        print(f"{search_method} query: {query}")
 
         # 1. Query expansion
         expanded_queries = self._expand_query_semantically(query)
         print(f"📝 Query expansion: {len(expanded_queries)} variants")
 
-        # 2. Multi-query retrieval
+        # 2. Multi-query retrieval (with optional hybrid search)
         all_candidates = []
         for expanded_query in expanded_queries:
-            candidates = self.db.similarity_search_with_score(
-                expanded_query,
-                k=self.config['max_candidates']
-            )
-            for doc, score in candidates:
-                all_candidates.append({
-                    'document': doc,
-                    'similarity_score': score,
-                    'source_query': expanded_query
-                })
+            if use_hybrid:
+                # Use hybrid search (BM25 + Vector)
+                candidates = self._hybrid_search(expanded_query, k=self.config['max_candidates'])
+                all_candidates.extend(candidates)
+            else:
+                # Use pure vector search
+                vector_results = self.db.similarity_search_with_score(
+                    expanded_query,
+                    k=self.config['max_candidates']
+                )
+                for doc, score in vector_results:
+                    all_candidates.append({
+                        'document': doc,
+                        'similarity_score': score,
+                        'source_query': expanded_query
+                    })
 
         # 3. Deduplication
         unique_candidates = self._deduplicate_candidates(all_candidates)

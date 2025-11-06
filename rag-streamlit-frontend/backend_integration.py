@@ -52,15 +52,15 @@ if BACKEND_AVAILABLE:
             # Check which RAG system to initialize
             if 'PureSemanticRAG' in globals():
                 # Initialize the pure semantic RAG system (no hardcoded rules)
-                # Using chroma_squad_dedup (populated database)
-                chroma_path_full = os.path.join(parent_dir, "script", "chroma_squad_dedup")
+                # Using chroma (merged dataset: 10,100 Q&A pairs)
+                chroma_path_full = os.path.join(parent_dir, "chroma")
                 print(f"🔄 [BACKEND] Initializing with database: {chroma_path_full}")
                 enhanced_rag = PureSemanticRAG(
                     api_key,
                     chroma_path=chroma_path_full
                 )
                 print(f"✅ [BACKEND] Database loaded: {enhanced_rag.chroma_path}")
-                print("✅ Pure semantic RAG system initialized with Multi-Paragraph Retrieval - 100% accuracy on test set")
+                print("✅ Pure semantic RAG system initialized with merged dataset (10,100 Q&A pairs, 11,453 chunks)")
             elif 'UltraFastRAG' in globals():
                 # Fallback to integrated RAG system
                 enhanced_rag = UltraFastRAG(
@@ -108,8 +108,29 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
             # Check if it's PureSemanticRAG or UltraFastRAG
             if hasattr(enhanced_rag, 'query_with_answer') and hasattr(enhanced_rag, 'llm'):
                 # Pure Semantic RAG API: query_with_answer(query_text) -> dict with answer, evidence_text, etc.
-                result = enhanced_rag.query_with_answer(query)
-                
+                # Lower thresholds for better recall on large dataset (10k+ Q&A pairs)
+                result = enhanced_rag.query_with_answer(
+                    query,
+                    k=10,
+                    relevance_threshold=0.4,  # Lower from 0.6 to 0.4 for better recall
+                    similarity_threshold=0.6   # Lower from 0.7 to 0.6 for better recall
+                )
+
+                # Add dataset answer by looking up the original dataset
+                try:
+                    import json
+                    dataset_path = os.path.join(parent_dir, "data", "merged_qa_dataset.json")
+                    if os.path.exists(dataset_path):
+                        with open(dataset_path, 'r', encoding='utf-8') as f:
+                            dataset = json.load(f)
+                        # Find matching question
+                        for item in dataset:
+                            if item['question'] == query:
+                                result['dataset_answer'] = item['answers']['text'][0]
+                                break
+                except Exception as e:
+                    print(f"⚠️ Could not load dataset answer: {e}")
+
                 processing_time = time.time() - start_time
 
                 # Extract character ranges from evidences array
@@ -135,7 +156,8 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                     "timestamp": time.time(),
                     "chunks": result.get("chunks_used", []),
                     "ranking_summary": result.get("ranking_summary", {}),
-                    "evidences": result.get("evidences", [])  # Pass through Strategy 3 evidences array
+                    "evidences": result.get("evidences", []),  # Pass through Strategy 3 evidences array
+                    "dataset_answer": result.get("dataset_answer", "")  # Include dataset answer
                 }
             else:
                 # Fallback to integrated RAG API: query(query_text, k) -> (answer, source_document, evidence_text, start_pos, end_pos)
