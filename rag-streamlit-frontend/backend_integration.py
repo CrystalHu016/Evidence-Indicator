@@ -9,6 +9,9 @@ import sys
 import time
 from typing import Dict, Optional, Tuple
 
+# Import match metrics calculator
+from calculate_match_metrics import calculate_char_match_rate
+
 # Add parent directory to path to import rag.py
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -143,6 +146,22 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                         start_char = char_ranges[0][0]
                         end_char = char_ranges[0][1]
 
+                # Calculate match metrics between extracted evidence and dataset answer
+                match_metrics = {}
+                dataset_answer = result.get("dataset_answer", "")
+                if dataset_answer and evidences:
+                    # Collect all extracted evidence texts
+                    all_evidence_texts = []
+                    for ev in evidences:
+                        if ev.get("extracted_evidence"):
+                            all_evidence_texts.append(ev["extracted_evidence"])
+
+                    # Calculate metrics for the first (primary) evidence
+                    if all_evidence_texts:
+                        primary_evidence = all_evidence_texts[0]
+                        match_metrics = calculate_char_match_rate(primary_evidence, dataset_answer)
+                        print(f"📊 Match Metrics: {match_metrics['match_rate']:.2%} match rate")
+
                 backend_result = {
                     "answer": result.get("answer", ""),
                     "source_document": result.get("source_document", ""),
@@ -157,7 +176,8 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                     "chunks": result.get("chunks_used", []),
                     "ranking_summary": result.get("ranking_summary", {}),
                     "evidences": result.get("evidences", []),  # Pass through Strategy 3 evidences array
-                    "dataset_answer": result.get("dataset_answer", "")  # Include dataset answer
+                    "dataset_answer": result.get("dataset_answer", ""),  # Include dataset answer
+                    "match_metrics": match_metrics  # Include character-level match metrics
                 }
             else:
                 # Fallback to integrated RAG API: query(query_text, k) -> (answer, source_document, evidence_text, start_pos, end_pos)

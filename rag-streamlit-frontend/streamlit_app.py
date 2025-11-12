@@ -63,7 +63,7 @@ class AppConfig:
     API_BASE_URL = "http://localhost:8000"  # Backend RAG API
     DEFAULT_TIMEOUT = 30
     BATCH_TIMEOUT = 120
-    MAX_HISTORY_ITEMS = 50
+    MAX_HISTORY_ITEMS = 100  # Increased to 100 to show all historical queries
     PAGE_TITLE = "根拠提示装置 | Evidence Indicator RAG System"
     PAGE_ICON = "🔍"
 
@@ -208,7 +208,7 @@ def initialize_session_state():
             try:
                 manager = QueryHistoryManager(DB_PATH)
                 # Get recent queries from database
-                recent_queries = manager.get_recent_queries(limit=50)
+                recent_queries = manager.get_recent_queries(limit=AppConfig.MAX_HISTORY_ITEMS)
 
                 # Load dataset for looking up answers
                 dataset_lookup = {}
@@ -254,27 +254,55 @@ def initialize_session_state():
                         'highlighted_evidences': []
                     }
 
-                    # Load detailed evidence data for this query
-                    query_id = record['id']
-                    evidence_records = manager.get_evidence_for_query(query_id)
-                    for ev_record in evidence_records:
-                        # ev_record: (id, query_id, chunk_id, chunk_content, extraction_prompt, llm_response,
-                        #             extracted_ranges, extracted_texts, similarity_score, semantic_relevance, created_at, core_term)
-                        evidence_item = {
-                            'chunk_id': ev_record[2],
-                            'chunk_content': ev_record[3],
-                            'evidence_variant_prompt': ev_record[4],  # Store the evidence extraction prompt (variant method)
-                            'llm_response': ev_record[5],  # Store the LLM response
-                            'extracted_evidence': '\n'.join(json.loads(ev_record[7])) if ev_record[7] else '',
-                            'char_ranges': json.loads(ev_record[6]) if ev_record[6] else [],
-                            'similarity_score': ev_record[8],
-                            'semantic_relevance': ev_record[9],
-                            'is_empty': not bool(ev_record[7]),
-                            'core_term': ev_record[10] if len(ev_record) > 10 else ''  # Load core term (index 10: core_term, index 11: created_at)
-                        }
-                        history_item['evidences'].append(evidence_item)
-                        if not evidence_item['is_empty'] and ev_record[7]:
-                            history_item['highlighted_evidences'].extend(json.loads(ev_record[7]))
+                    # Try to load evidences from JSON column first (new method)
+                    evidences_json = record.get('evidences', '')
+                    if evidences_json:
+                        try:
+                            deserialized_evidences = json.loads(evidences_json)
+                            history_item['evidences'] = deserialized_evidences
+                            # Extract highlighted evidences
+                            for ev in deserialized_evidences:
+                                if not ev.get('is_empty', True) and ev.get('extracted_evidence'):
+                                    history_item['highlighted_evidences'].append(ev.get('extracted_evidence'))
+                        except Exception as e:
+                            print(f"⚠️ Could not deserialize evidences JSON for query_id={record['id']}: {e}")
+
+                    # Fallback: Load detailed evidence data from evidence_extraction table (old method)
+                    if not history_item['evidences']:
+                        query_id = record['id']
+                        evidence_records = manager.get_evidence_for_query(query_id)
+                        for ev_record in evidence_records:
+                            # ev_record: (id, query_id, chunk_id, chunk_content, extraction_prompt, llm_response,
+                            #             extracted_ranges, extracted_texts, similarity_score, semantic_relevance, created_at, core_term)
+                            evidence_item = {
+                                'chunk_id': ev_record[2],
+                                'chunk_content': ev_record[3],
+                                'evidence_variant_prompt': ev_record[4],  # Store the evidence extraction prompt (variant method)
+                                'llm_response': ev_record[5],  # Store the LLM response
+                                'extracted_evidence': '\n'.join(json.loads(ev_record[7])) if ev_record[7] else '',
+                                'char_ranges': json.loads(ev_record[6]) if ev_record[6] else [],
+                                'similarity_score': ev_record[8],
+                                'semantic_relevance': ev_record[9],
+                                'is_empty': not bool(ev_record[7]),
+                                'core_term': ev_record[10] if len(ev_record) > 10 else ''  # Load core term (index 10: core_term, index 11: created_at)
+                            }
+                            history_item['evidences'].append(evidence_item)
+                            if not evidence_item['is_empty'] and ev_record[7]:
+                                history_item['highlighted_evidences'].extend(json.loads(ev_record[7]))
+
+                    # Calculate match metrics for this history item if we have dataset answer and evidence
+                    if dataset_answer and history_item['highlighted_evidences']:
+                        try:
+                            from calculate_match_metrics import calculate_char_match_rate
+                            # Use the first evidence for match calculation
+                            primary_evidence = history_item['highlighted_evidences'][0]
+                            match_metrics = calculate_char_match_rate(primary_evidence, dataset_answer)
+                            history_item['match_metrics'] = match_metrics
+                        except Exception as e:
+                            print(f"⚠️ Could not calculate match metrics for history item: {e}")
+                            history_item['match_metrics'] = {}
+                    else:
+                        history_item['match_metrics'] = {}
 
                     loaded_history.append(history_item)
 
@@ -529,6 +557,39 @@ def display_results():
     if dataset_answer:
         st.markdown(t("**📋 元のデータセット回答:**", "**📋 Original Dataset Answer:**"))
         st.info(dataset_answer)
+
+        # Display match metrics if available
+        match_metrics = result.get('match_metrics', {})
+        if match_metrics:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                match_rate = match_metrics.get('match_rate', 0.0)
+                st.metric(
+                    label=t("文字レベルマッチング", "Character-level matching"),
+                    value=f"{match_rate:.1%}",
+                    help=t("根拠情報と元データセット回答の一致率", "Match rate between evidence and dataset answer")
+                )
+            with col2:
+                precision = match_metrics.get('precision', 0.0)
+                st.metric(
+                    label=t("精度", "Precision"),
+                    value=f"{precision:.1%}",
+                    help=t("抽出した根拠のうち正しい割合", "Percentage of extracted evidence that is correct")
+                )
+            with col3:
+                recall = match_metrics.get('recall', 0.0)
+                st.metric(
+                    label=t("再現率", "Recall"),
+                    value=f"{recall:.1%}",
+                    help=t("データセット回答のうち見つけた割合", "Percentage of dataset answer found")
+                )
+            with col4:
+                exact_match = match_metrics.get('exact_match', False)
+                st.metric(
+                    label=t("完全一致", "Exact Match"),
+                    value=t("✅ はい", "✅ Yes") if exact_match else t("❌ いいえ", "❌ No"),
+                    help=t("100%一致するか", "Whether it's 100% match")
+                )
 
     # Display identified core terms from all chunks
     evidences = result.get('evidences', [])
@@ -912,14 +973,20 @@ def add_to_history(query: str, result: dict):
     if HISTORY_MANAGER_AVAILABLE:
         print(f"🔵 Attempting to save to database...")
         try:
+            import json
             manager = QueryHistoryManager(DB_PATH)
+
+            # Serialize evidences to JSON string
+            evidences_json = json.dumps(evidences, ensure_ascii=False) if evidences else ""
+
             query_id = manager.add_query(
                 query=query,
                 generated_answer=result.get('answer', ''),
                 confidence=result.get('confidence', 0),
                 processing_time=result.get('processing_time', 0),
                 model=result.get('model', 'Unknown'),
-                dataset_answer=result.get('dataset_answer', '')
+                dataset_answer=result.get('dataset_answer', ''),
+                evidences=evidences_json
             )
 
             # Save each evidence to database
@@ -947,6 +1014,7 @@ def add_to_history(query: str, result: dict):
         'query': query,
         'answer': result.get('answer', ''),
         'dataset_answer': result.get('dataset_answer', ''),  # Include dataset answer
+        'match_metrics': result.get('match_metrics', {}),  # Include match metrics
         'processing_time': result.get('processing_time', 0),
         'confidence': result.get('confidence', 0),
         'evidence_text': result.get('evidence_text', ''),
@@ -1089,6 +1157,39 @@ def query_history_interface():
                 if item.get('dataset_answer'):
                     st.markdown(t("**📋 元のデータセット回答:**", "**📋 Original Dataset Answer:**"))
                     st.info(item['dataset_answer'])
+
+                    # Display match metrics if available
+                    match_metrics = item.get('match_metrics', {})
+                    if match_metrics:
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            match_rate = match_metrics.get('match_rate', 0.0)
+                            st.metric(
+                                label=t("文字レベルマッチング", "Character-level matching"),
+                                value=f"{match_rate:.1%}",
+                                help=t("根拠情報と元データセット回答の一致率", "Match rate between evidence and dataset answer")
+                            )
+                        with col2:
+                            precision = match_metrics.get('precision', 0.0)
+                            st.metric(
+                                label=t("精度", "Precision"),
+                                value=f"{precision:.1%}",
+                                help=t("抽出した根拠のうち正しい割合", "Percentage of extracted evidence that is correct")
+                            )
+                        with col3:
+                            recall = match_metrics.get('recall', 0.0)
+                            st.metric(
+                                label=t("再現率", "Recall"),
+                                value=f"{recall:.1%}",
+                                help=t("データセット回答のうち見つけた割合", "Percentage of dataset answer found")
+                            )
+                        with col4:
+                            exact_match = match_metrics.get('exact_match', False)
+                            st.metric(
+                                label=t("完全一致", "Exact Match"),
+                                value=t("✅ はい", "✅ Yes") if exact_match else t("❌ いいえ", "❌ No"),
+                                help=t("100%一致するか", "Whether it's 100% match")
+                            )
 
                 # Display identified core terms
                 item_evidences = item.get('evidences', [])
