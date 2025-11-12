@@ -4,6 +4,79 @@ Character-level Match Rate Metrics for Evidence Evaluation
 Compares extracted evidence with dataset ground truth answers
 """
 
+import os
+import re
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+def calculate_llm_semantic_score(extracted_evidence: str, dataset_answer: str) -> float:
+    """
+    Use Gemini LLM to evaluate semantic match between extracted evidence and dataset answer
+
+    Args:
+        extracted_evidence: Evidence text extracted by the system
+        dataset_answer: Ground truth answer from dataset
+
+    Returns:
+        float: Semantic match score from 0.0 to 1.0 (0% to 100%)
+    """
+    if not extracted_evidence or not dataset_answer:
+        return 0.0
+
+    try:
+        import google.generativeai as genai
+
+        # Get API key from environment
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("⚠️ GEMINI_API_KEY not found in environment")
+            return 0.0
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+
+        # Construct prompt for semantic evaluation
+        prompt = f"""あなたは質問応答システムの評価者です。抽出された根拠情報が正解答案の意味を正確に含んでいるかを評価してください。
+
+正解答案（元のデータセット回答）：
+{dataset_answer}
+
+抽出された根拠情報：
+{extracted_evidence}
+
+評価基準：
+- 100%: 根拠情報が正解答案の意味を完全に含んでいる、または同じ意味である
+- 80-99%: 根拠情報が正解答案の主要な意味をほぼ全て含んでいるが、一部表現が異なる
+- 60-79%: 根拠情報が正解答案の意味の大部分を含んでいるが、重要な詳細が欠けている
+- 40-59%: 根拠情報が正解答案の意味の一部を含んでいるが、不完全または不正確
+- 20-39%: 根拠情報が正解答案とわずかに関連しているが、主要な意味が異なる
+- 0-19%: 根拠情報が正解答案と全く関係ない、または完全に不正確
+
+**数値のみを返してください（0-100の整数）。説明は不要です。**
+
+スコア:"""
+
+        # Call Gemini API
+        response = model.generate_content(prompt)
+        score_text = response.text.strip()
+
+        # Extract numeric score
+        match = re.search(r'\d+', score_text)
+        if match:
+            score = int(match.group())
+            # Normalize to 0.0-1.0 range
+            return min(max(score / 100.0, 0.0), 1.0)
+        else:
+            print(f"⚠️ Could not parse LLM score from response: {score_text}")
+            return 0.0
+
+    except Exception as e:
+        print(f"⚠️ Error calculating LLM semantic score: {e}")
+        return 0.0
+
+
 def calculate_char_match_rate(extracted_evidence: str, dataset_answer: str) -> dict:
     """
     Calculate character-level match rate between extracted evidence and dataset answer

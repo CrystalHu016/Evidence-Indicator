@@ -565,14 +565,14 @@ def display_results():
             with col1:
                 match_rate = match_metrics.get('match_rate', 0.0)
                 st.metric(
-                    label=t("文字レベルマッチング", "Character-level matching"),
+                    label=t("総合マッチング", "Overall Matching"),
                     value=f"{match_rate:.1%}",
-                    help=t("根拠情報と元データセット回答の一致率", "Match rate between evidence and dataset answer")
+                    help=t("F1スコア：精度と再現率の調和平均", "F1 Score: Harmonic mean of precision and recall")
                 )
             with col2:
                 precision = match_metrics.get('precision', 0.0)
                 st.metric(
-                    label=t("精度", "Precision"),
+                    label=t("文字レベルマッチング率", "Character-level Match Rate"),
                     value=f"{precision:.1%}",
                     help=t("抽出した根拠のうち正しい割合", "Percentage of extracted evidence that is correct")
                 )
@@ -1165,14 +1165,14 @@ def query_history_interface():
                         with col1:
                             match_rate = match_metrics.get('match_rate', 0.0)
                             st.metric(
-                                label=t("文字レベルマッチング", "Character-level matching"),
+                                label=t("総合マッチング", "Overall Matching"),
                                 value=f"{match_rate:.1%}",
-                                help=t("根拠情報と元データセット回答の一致率", "Match rate between evidence and dataset answer")
+                                help=t("F1スコア：精度と再現率の調和平均", "F1 Score: Harmonic mean of precision and recall")
                             )
                         with col2:
                             precision = match_metrics.get('precision', 0.0)
                             st.metric(
-                                label=t("精度", "Precision"),
+                                label=t("文字レベルマッチング率", "Character-level Match Rate"),
                                 value=f"{precision:.1%}",
                                 help=t("抽出した根拠のうち正しい割合", "Percentage of extracted evidence that is correct")
                             )

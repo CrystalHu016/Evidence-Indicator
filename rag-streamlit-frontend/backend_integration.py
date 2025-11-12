@@ -10,7 +10,7 @@ import time
 from typing import Dict, Optional, Tuple
 
 # Import match metrics calculator
-from calculate_match_metrics import calculate_char_match_rate
+from calculate_match_metrics import calculate_char_match_rate, calculate_llm_semantic_score
 
 # Add parent directory to path to import rag.py
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -161,6 +161,12 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                         primary_evidence = all_evidence_texts[0]
                         match_metrics = calculate_char_match_rate(primary_evidence, dataset_answer)
                         print(f"📊 Match Metrics: {match_metrics['match_rate']:.2%} match rate")
+
+                        # Calculate LLM semantic score
+                        print(f"🤖 Calculating LLM semantic score...")
+                        llm_score = calculate_llm_semantic_score(primary_evidence, dataset_answer)
+                        match_metrics['llm_score'] = llm_score
+                        print(f"🤖 LLM Score: {llm_score:.2%}")
 
                 backend_result = {
                     "answer": result.get("answer", ""),
