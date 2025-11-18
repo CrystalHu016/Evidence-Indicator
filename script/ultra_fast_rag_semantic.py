@@ -449,15 +449,23 @@ class PureSemanticRAG:
             'hybrid_alpha': 0.5  # Weight for combining BM25 (1-alpha) and Vector (alpha) scores
         }
 
-    def build_vector_store(self, data_file: str, chunk_size: int = 200, chunk_overlap: int = 50) -> bool:
-        """Build pure semantic vector database"""
+    def build_vector_store(self, data_file: str, chunk_size: int = 300, chunk_overlap: int = 100, force_rebuild: bool = False) -> bool:
+        """Build pure semantic vector database
+
+        Args:
+            data_file: Path to JSON data file
+            chunk_size: Size of text chunks (default: 300, increased from 200 for better context)
+            chunk_overlap: Overlap between chunks (default: 100, increased from 50 for continuity)
+            force_rebuild: If True, rebuild even if database exists (default: False)
+        """
         try:
             print(f"🏗️ Building pure semantic vector database...")
             print(f"📁 Data file: {data_file}")
             print(f"🗄️ Vector database path: {self.chroma_path}")
+            print(f"📏 Chunk size: {chunk_size}, Overlap: {chunk_overlap}")
 
             # Check if vector store already exists
-            if os.path.exists(self.chroma_path) and os.listdir(self.chroma_path):
+            if not force_rebuild and os.path.exists(self.chroma_path) and os.listdir(self.chroma_path):
                 print(f"✅ Loaded existing vector database: {self.chroma_path}")
                 self.db = Chroma(
                     persist_directory=self.chroma_path,

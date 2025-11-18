@@ -10,7 +10,7 @@ import time
 from typing import Dict, Optional, Tuple
 
 # Import match metrics calculator
-from calculate_match_metrics import calculate_char_match_rate, calculate_llm_semantic_score
+from calculate_match_metrics import calculate_char_match_rate, calculate_llm_semantic_score, judge_answer_relevance
 
 # Add parent directory to path to import rag.py
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -168,6 +168,12 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                         match_metrics['llm_score'] = llm_score
                         print(f"🤖 LLM Score: {llm_score:.2%}")
 
+                # Judge if the generated answer actually answers the query
+                print(f"🤖 Judging answer relevance...")
+                dataset_answer = result.get("dataset_answer", "")
+                answer_judgment = judge_answer_relevance(query, result.get("answer", ""), dataset_answer)
+                print(f"🤖 Answer Judgment: {answer_judgment}")
+
                 backend_result = {
                     "answer": result.get("answer", ""),
                     "source_document": result.get("source_document", ""),
@@ -183,7 +189,8 @@ def call_backend_query(query: str, system_mode: str = "enhanced") -> Tuple[Optio
                     "ranking_summary": result.get("ranking_summary", {}),
                     "evidences": result.get("evidences", []),  # Pass through Strategy 3 evidences array
                     "dataset_answer": result.get("dataset_answer", ""),  # Include dataset answer
-                    "match_metrics": match_metrics  # Include character-level match metrics
+                    "match_metrics": match_metrics,  # Include character-level match metrics
+                    "answer_judgment": answer_judgment  # Include Gemini yes/no judgment
                 }
             else:
                 # Fallback to integrated RAG API: query(query_text, k) -> (answer, source_document, evidence_text, start_pos, end_pos)

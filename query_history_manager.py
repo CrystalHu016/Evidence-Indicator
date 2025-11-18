@@ -99,6 +99,15 @@ class QueryHistoryManager:
             cursor.execute("ALTER TABLE evidence_extraction ADD COLUMN core_term TEXT")
             print("✅ Migration completed: core_term column added")
 
+        # Migration: Add answer_judgment column if it doesn't exist
+        try:
+            cursor.execute("SELECT answer_judgment FROM query_history LIMIT 1")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            print("🔧 Migrating database: Adding answer_judgment column to query_history table...")
+            cursor.execute("ALTER TABLE query_history ADD COLUMN answer_judgment TEXT")
+            print("✅ Migration completed: answer_judgment column added")
+
         conn.commit()
         conn.close()
 
@@ -113,7 +122,8 @@ class QueryHistoryManager:
         confidence: float = 0.0,
         num_chunks: int = 0,
         dataset_answer: str = "",
-        evidences: str = ""
+        evidences: str = "",
+        answer_judgment: str = ""
     ) -> int:
         """Add a new query to history
 
@@ -126,6 +136,7 @@ class QueryHistoryManager:
             num_chunks: Number of chunks used
             dataset_answer: Ground truth answer from dataset (optional)
             evidences: JSON string of evidence chunks (optional)
+            answer_judgment: Gemini yes/no judgment on answer relevance (optional)
 
         Returns:
             query_id: ID of the inserted query record
@@ -137,9 +148,9 @@ class QueryHistoryManager:
 
         cursor.execute("""
             INSERT INTO query_history
-            (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks, dataset_answer, evidences)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks, dataset_answer, evidences))
+            (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks, dataset_answer, evidences, answer_judgment)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (timestamp, query, generated_answer, processing_time, model, confidence, num_chunks, dataset_answer, evidences, answer_judgment))
 
         query_id = cursor.lastrowid
         conn.commit()

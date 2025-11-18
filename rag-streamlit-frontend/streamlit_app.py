@@ -251,7 +251,8 @@ def initialize_session_state():
                         'start_char': 0,
                         'end_char': 0,
                         'evidences': [],
-                        'highlighted_evidences': []
+                        'highlighted_evidences': [],
+                        'answer_judgment': record.get('answer_judgment', '')  # Load Gemini answer judgment
                     }
 
                     # Try to load evidences from JSON column first (new method)
@@ -986,7 +987,8 @@ def add_to_history(query: str, result: dict):
                 processing_time=result.get('processing_time', 0),
                 model=result.get('model', 'Unknown'),
                 dataset_answer=result.get('dataset_answer', ''),
-                evidences=evidences_json
+                evidences=evidences_json,
+                answer_judgment=result.get('answer_judgment', '')
             )
 
             # Save each evidence to database
@@ -1150,7 +1152,18 @@ def query_history_interface():
             with col1:
                 st.markdown(t("**クエリ:**", "**Query:**"))
                 st.write(item['query'])
-                st.markdown(t("**回答:**", "**Answer:**"))
+
+                # Display answer with LLM judgment in title
+                answer_judgment = item.get('answer_judgment', '')
+                if answer_judgment:
+                    if answer_judgment.lower() == 'yes':
+                        judgment_text = "✅yes"
+                    else:
+                        judgment_text = "❌no"
+                    answer_title = t(f"**回答:**（LLM回答判断：{judgment_text}）", f"**Answer:** (LLM Judgment: {judgment_text})")
+                else:
+                    answer_title = t("**回答:**", "**Answer:**")
+                st.markdown(answer_title)
                 st.write(item['answer'])
 
                 # Display dataset answer if available
