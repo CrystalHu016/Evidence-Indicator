@@ -252,7 +252,8 @@ def initialize_session_state():
                         'end_char': 0,
                         'evidences': [],
                         'highlighted_evidences': [],
-                        'answer_judgment': record.get('answer_judgment', '')  # Load Gemini answer judgment
+                        'answer_judgment': record.get('answer_judgment', ''),  # Load Gemini answer judgment
+                        'context': record.get('context', '')  # Load context from database
                     }
 
                     # Try to load evidences from JSON column first (new method)
@@ -1113,6 +1114,13 @@ def query_history_interface():
             [5, 10, 20, 50],
             index=1
         )
+    with col4:
+        if st.button(t("🔄 DBから再読込", "Reload from DB")):
+            # Clear session state to force reload from database
+            if 'query_history' in st.session_state:
+                del st.session_state['query_history']
+            st.success(t("データベースから再読み込みしました！", "Reloaded from database!"))
+            st.rerun()
 
     # Calculate total pages
     total_items = len(sorted_history)
@@ -1265,37 +1273,55 @@ def query_history_interface():
                         with st.expander(t("📄 完全な根拠チャンク (黄色でハイライト表示)", "📄 Full evidence chunks (highlighted in yellow)")):
                             for idx, evidence in enumerate(valid_evidences, 1):
                                 chunk_content = evidence.get('chunk_content', '')
+                                extracted_evidence = evidence.get('extracted_evidence', '')
                                 char_ranges = evidence.get('char_ranges', [])
 
                                 st.markdown(f"**Chunk {idx}:**")
-                                if chunk_content and char_ranges:
-                                    # Use highlight function to show evidence in yellow
-                                    highlighted_html = highlight_rag_evidence_in_source(
-                                        chunk_content,
-                                        evidence.get('extracted_evidence', ''),
-                                        char_ranges
-                                    )
-                                    st.markdown(highlighted_html, unsafe_allow_html=True)
+
+                                # Simple highlighting: use context as source and highlight evidence text
+                                if chunk_content and extracted_evidence:
+                                    # For V1 data: use context from dataset as the full source text
+                                    context = item.get('context', '')
+
+                                    if context and extracted_evidence in context:
+                                        # Highlight evidence in context
+                                        highlighted_html = context.replace(
+                                            extracted_evidence,
+                                            f'<mark style="background-color: yellow;">{extracted_evidence}</mark>'
+                                        )
+                                        st.markdown(f'<div style="padding: 1rem; background-color: #f0f0f0; border-radius: 5px; white-space: pre-wrap;">{highlighted_html}</div>', unsafe_allow_html=True)
+                                    elif context:
+                                        # Evidence not found in context, show both
+                                        st.info(f"**原文 (Context):** {context}")
+                                        st.warning(f"**根拠 (Evidence):** {extracted_evidence}")
+                                    else:
+                                        # No context available, fallback to chunk_content
+                                        st.info(chunk_content or extracted_evidence)
                                 else:
-                                    st.info(chunk_content)
+                                    st.info(chunk_content or extracted_evidence)
                                 st.markdown("---")
 
-                        # Add extraction prompt expander
-                        with st.expander(t("🔍 Extraction Prompt Instructions", "🔍 Extraction Prompt Instructions")):
-                            for idx, evidence in enumerate(valid_evidences, 1):
-                                # Try variant prompt first (new), fallback to range prompt (old)
-                                extraction_prompt = evidence.get('evidence_variant_prompt', '') or evidence.get('evidence_range_prompt', '')
-                                llm_response = evidence.get('llm_response', '')
+                        # Add extraction prompt expander (only if prompts exist)
+                        has_prompts = any(
+                            evidence.get('evidence_variant_prompt', '') or evidence.get('evidence_range_prompt', '')
+                            for evidence in valid_evidences
+                        )
+                        if has_prompts:
+                            with st.expander(t("🔍 Extraction Prompt Instructions", "🔍 Extraction Prompt Instructions")):
+                                for idx, evidence in enumerate(valid_evidences, 1):
+                                    # Try variant prompt first (new), fallback to range prompt (old)
+                                    extraction_prompt = evidence.get('evidence_variant_prompt', '') or evidence.get('evidence_range_prompt', '')
+                                    llm_response = evidence.get('llm_response', '')
 
-                                if extraction_prompt:
-                                    st.markdown(f"**Chunk {idx} - Extraction Prompt:**")
-                                    st.code(extraction_prompt, language="text")
+                                    if extraction_prompt:
+                                        st.markdown(f"**Chunk {idx} - Extraction Prompt:**")
+                                        st.code(extraction_prompt, language="text")
 
-                                    if llm_response:
-                                        st.markdown(f"**LLM Response:**")
-                                        st.code(llm_response, language="text")
+                                        if llm_response:
+                                            st.markdown(f"**LLM Response:**")
+                                            st.code(llm_response, language="text")
 
-                                    st.markdown("---")
+                                        st.markdown("---")
                     else:
                         # Fallback: show original evidence_text if no valid evidences
                         with st.expander(t("📄 完全な根拠チャンク", "📄 Full evidence chunk")):
