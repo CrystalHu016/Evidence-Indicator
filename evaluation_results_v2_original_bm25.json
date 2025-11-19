@@ -1,0 +1,908 @@
+{
+  "total": 100,
+  "correct_answers": 89,
+  "incorrect_answers": 8,
+  "system_errors": 3,
+  "details": [
+    {
+      "query": "梅雨は、世界的にどのあたりで見られる気象ですか？",
+      "dataset_answer": "東アジアの広範囲",
+      "generated_answer": "梅雨は、日本（北海道と小笠原諸島を除く）、朝鮮半島南部、中国の南部から長江流域にかけての沿海部、および台湾など、東アジアの広範囲において見られる特有の気象現象である。アジア・モンスーンの影響を受ける地域をモンスーン・アジアと呼ぶ。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 5
+    },
+    {
+      "query": "冬場は何のCMが多く流れるか",
+      "dataset_answer": "スキー場",
+      "generated_answer": "冬場はスキー場のCMが多く流れ、移動体通信事業者や飲料企業・石油元売企業といった大手企業のCMも多い。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "砂浜にネットを張ったコートでおこなう球技は？",
+      "dataset_answer": "ビーチバレー",
+      "generated_answer": "砂浜にネットを張ったコートでおこなう球技はビーチバレーです。2人1組のチーム同士で対戦するアメリカ発祥のビーチスポーツで、1996年のアトランタオリンピックよりオリンピックの正式種目となりました。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "Apple Computerとの協業で全米の学校に普及が進み、Appleとの関係が構築されたメーカーはどこか",
+      "dataset_answer": "パイオニア",
+      "generated_answer": "Apple Computerとの協業で全米の学校に普及が進み、Appleとの関係が構築されたメーカーはパイオニアである。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "池尾和人が言及した銀行は",
+      "dataset_answer": "中央銀行",
+      "generated_answer": "池尾和人が言及した銀行は「中央銀行」です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": " サツマイモの葉に、直接つながっている柔らかい緑色の葉柄の部分の茎は、中国の特にどこで食べられているか。",
+      "dataset_answer": "福建省",
+      "generated_answer": "中国（特に福建省）や台湾では、サツマイモの葉柄の部分が普通に食べられている。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "茶道に明るい人のことを何というか",
+      "dataset_answer": "茶人",
+      "generated_answer": "茶道に明るい人のことを茶人（ちゃじん、さじん）という。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "江戸時代に中津藩があったのは何県か？",
+      "dataset_answer": "大分県",
+      "generated_answer": "江戸時代に中津藩があったのは大分県です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "2020年2月11日未明、東京都世田谷区の自宅の浴槽でぐったりしているところを家政婦が発見されたのは",
+      "dataset_answer": "野村克也",
+      "generated_answer": "2020年2月11日未明、東京都世田谷区の自宅の浴槽でぐったりしているところを家政婦が発見し、病院に搬送されたが死亡が確認された。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "ホンジュラスの政党でカリアス大統領の支持を受けていたのは",
+      "dataset_answer": "国民党",
+      "generated_answer": "カリアス大統領の支持を受けていたのは国民党であり、「カリアスが大統領の座に留まり続けることがホンジュラスに平和と秩序をもたらず唯一の方法である」とのプロパガンダを打ち出していた。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "第2次安倍内閣で副総理兼財務大臣兼金融担当大臣として入閣した人は？",
+      "dataset_answer": "麻生太郎",
+      "generated_answer": "第2次安倍内閣で副総理兼財務大臣兼金融担当大臣として入閣したのは麻生太郎である。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "違法減少説によれば、誤想過剰防衛について刑を減免することが否定されるのは何条何項か",
+      "dataset_answer": "36条2項",
+      "generated_answer": "違法減少説によれば、誤想過剰防衛について刑を減免することが否定されるのは、36条2項である。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "ベトナム政府非公認教団は？",
+      "dataset_answer": "統一ベトナム仏教教会",
+      "generated_answer": "ベトナム政府非公認教団には「統一ベトナム仏教教会」があり、1992年には弾圧に抗議して騒擾事件を起こした。2014年現在、非公認プロテスタント教団の活動は第三級行政区レベルに留められ、上位の行政区では活動ができないなどの制限が存在する。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "特別支援学校には何が併設されていることがあるか",
+      "dataset_answer": "寄宿舎",
+      "generated_answer": "特別支援学校には寄宿舎が併設されていることがあり、訪問学級や重複障害学級も設置されている場合がある。寄宿舎は校舎と同じ敷地内に設けられ、生活指導を受ける寄宿舎指導員が配置されている。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 5
+    },
+    {
+      "query": "半導体素子が中心的機能を担っているのはコンピュータ、携帯電話等の何機器？",
+      "dataset_answer": "電子機器",
+      "generated_answer": "半導体素子が中心的機能を担っているのはコンピュータ、携帯電話等の電子機器である。さらに自動車や各種産業機器にも組込まれている。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "1997年7月からタイを中心に始まったのはなんの危機？",
+      "dataset_answer": "アジア通貨危機",
+      "generated_answer": "1997年7月からタイを中心に始まったのはアジア通貨危機である。これはアジア各国の急激な通貨下落（減価）現象であり、東アジア、東南アジアの各国経済に大きな悪影響を及ぼした。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "特別支援学校に就学することを決める機関はどこか",
+      "dataset_answer": "教育支援委員会",
+      "generated_answer": "就学先は最終的に市区町村教育支援委員会が決定します。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "より高い音を出すにはどうしたら良いか。",
+      "dataset_answer": "左手の指で弦を指板に押しつける",
+      "generated_answer": "左手の指で弦を指板に押しつけることによって弦長を短くし、より高い音を出すことができる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "徳川氏の武将の酒井忠次が橋をかけたが",
+      "dataset_answer": "吉田大橋",
+      "generated_answer": "酒井忠次が1570年（元亀元年）に吉田川（豊川）に吉田大橋（土橋）を架ける土木工事を実施した。その後、池田輝政がこの土橋を木橋に架け替え、位置も整備した。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "抗体が何へ結合する？",
+      "dataset_answer": "抗原",
+      "generated_answer": "抗体は抗原へ結合する。抗体が抗原と結合すると、その抗原と抗体の複合体を白血球やマクロファージが認識・貪食して体内から除去する。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 6
+    },
+    {
+      "query": "NHK北九州の親局送信所はどこにある？",
+      "dataset_answer": "皿倉山",
+      "generated_answer": "NHK北九州の親局送信所は皿倉山である。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "大分県のしいたけの高級品として珍重される身が厚く表層に星型の亀裂が入るしいたけを何と言う？",
+      "dataset_answer": "冬菇",
+      "generated_answer": "大分県の高級品として珍重される身が厚く表層に星型の亀裂が入るしいたけは冬菇（どんこ）です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "1861年にマルクスが新聞社を解雇された理由は何か",
+      "dataset_answer": "アメリカで南北戦争が勃発したこと",
+      "generated_answer": "Sorry, no relevant information is currently available.",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": true,
+      "num_evidences": 0
+    },
+    {
+      "query": "畳のサイズには何種類ある",
+      "dataset_answer": "2種類",
+      "generated_answer": "畳のサイズには、京間（本間）、中京間（三六間）、江戸間（関東間、田舎間、五八間）、団地間（公団サイズ、五六間）の4種類が有名である。基本的な一畳サイズは3尺×6尺（910mm×1820mm、1.6562 m2）であるが、部屋の寸法に合わせて注文生産される場合が一般的で、サイズは一定していない。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "我那覇和樹が試合後に受けた疲労回復の静脈注射を打った日付は？",
+      "dataset_answer": "4月23日",
+      "generated_answer": "我那覇和樹が試合後に受けた疲労回復の静脈注射は4月23日に行われた。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "プロは世界ムエタイ評議会が全何階級を規定している？",
+      "dataset_answer": "19",
+      "generated_answer": "プロは世界ムエタイ評議会が全19階級を規定している。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "湾岸戦争はどこの湾のことか",
+      "dataset_answer": "ペルシア湾",
+      "generated_answer": "湾岸戦争はペルシア湾のことです。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "新制東京大学工学部にあった11学科のうち、1951年に廃止された学科は何か",
+      "dataset_answer": "石油工学科",
+      "generated_answer": "1951年に廃止された学科は石油工学科です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "ホンジュラスの通貨単位の名前は？",
+      "dataset_answer": "レンピラ",
+      "generated_answer": "Sorry, no relevant information is currently available.",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": true,
+      "num_evidences": 0
+    },
+    {
+      "query": "患者とその家族に対して適切に病状説明すること（患者教育）は、どのようなメリットがあるか",
+      "dataset_answer": "合併症や病院訪問の減少につながる。",
+      "generated_answer": "患者とその家族に対して適切に病状説明すること（患者教育）は、合併症や病院訪問の減少につながる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "レーベル「güt（グート）」を設立を設立したのは",
+      "dataset_answer": "坂本龍一",
+      "generated_answer": "レーベル「güt（グート）」を設立したのは坂本龍一です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "ソフトウェア設計上のよくある問題に対する解決方法の典型例を何といいますか？",
+      "dataset_answer": "デザインパターン",
+      "generated_answer": "よくある問題に対する解決方法の典型例はデザインパターンと呼ばれます。デザインパターンは、過去に評価済みの解法のテンプレートです。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "モータリゼーションによって何の利用が増加するか?",
+      "dataset_answer": "自動車",
+      "generated_answer": "モータリゼーションによって自動車利用が増加し、利用形態が発展・多様化することによって、都市の発展や基盤整備には大きな変革の圧力が発生する。特に、都市部の道路交通網の発展や、地方部での自動車依存が顕著になる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "ニーオーレスンの鉱山があるのはどこ？",
+      "dataset_answer": "スヴァールバル諸島",
+      "generated_answer": "ニーオーレスンの鉱山はスヴァールバル諸島にあります。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "携帯型ゲーム機を一つ答えよ",
+      "dataset_answer": "ゲームボーイ",
+      "generated_answer": "携帯型ゲーム機の一例として、ニンテンドーDSが挙げられます。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "孫文がサンフランシスコで興中会を結成したのはいつか？",
+      "dataset_answer": "1894年11月",
+      "generated_answer": "孫文がサンフランシスコで興中会を結成したのは1894年11月です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "基礎研究を手がける研究部門はどこにあるか",
+      "dataset_answer": "持株会社内部に残っている",
+      "generated_answer": "基礎研究を手がける研究部門は、日本電信電話の持株会社内部に残っており、日立製作所中央研究所は東京都国分寺市に所在する。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 4
+    },
+    {
+      "query": "最初のハリウッドの映画スタジオは、1911年に何と言う会社が建てたものですか。",
+      "dataset_answer": "ネストール社",
+      "generated_answer": "最初のハリウッドの映画スタジオは、1911年にネストール社が建てたものである。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "禅宗（特には臨済宗）では肉体と精神とを如何に考えるか",
+      "dataset_answer": "同一のものと考え、区別をしない",
+      "generated_answer": "禅宗（特には臨済宗）では肉体と精神とは同一のものと考え、区別をしない。肉体があるから精神もありうるのであり、精神があるというならばそこには発生原因として肉体がなければならない。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "五胡十六国時代の次の時代は何時代？",
+      "dataset_answer": "南北朝時代",
+      "generated_answer": "五胡十六国時代は北魏による華北の統一をもって終わり、次の時代は南北朝時代の始まりとなる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "音読みのペンネームは小説家のに倣ったもので何というか",
+      "dataset_answer": "ぎしゅう",
+      "generated_answer": "音読みのペンネームは小説家のに倣ったもので、清張は「ぎしゅう」が本名であると勘違いしていた。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "鑑真が日本にもたらして、唐の天台宗を含めて諸国の標準となっていた制度は何か？",
+      "dataset_answer": "戒律制度",
+      "generated_answer": "鑑真が日本にもたらした戒律制度は、唐の天台宗を含めて諸国の標準となっていたもので、僧になるためには具足戒を三師七証を前に受戒する必要があった。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "広小路学舎にある学部は？",
+      "dataset_answer": "文系学部",
+      "generated_answer": "広小路学舎には文系学部が置かれています。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "大阪大学豊中キャンパスの敷地の西隅にある寮は？",
+      "dataset_answer": "刀根山寮",
+      "generated_answer": "大阪大学豊中キャンパスの敷地の西隅にある寮は刀根山寮です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "太平洋戦争中のビルマの指導者は",
+      "dataset_answer": "アウン・サン",
+      "generated_answer": "太平洋戦争中のビルマの指導者はアウン・サンであり、彼はビルマ国軍を指揮して日本軍に対抗しました。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "天台法華宗の年分度者および大乗戒壇設立に関わる文書を蒐集した書は",
+      "dataset_answer": "天台法華宗年分縁起",
+      "generated_answer": "『天台法華宗年分縁起』（てんだいほっけしゅうねんぶんえんぎ）は、天台法華宗の年分度者および大乗戒壇設立に関わる文書を蒐集した書であり、延暦寺蔵の国宝です。収録されているのは以下の6通。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "ACFフィオレンティーナのホームスタジアム名はなにか。",
+      "dataset_answer": "アルテミオ・フランキ",
+      "generated_answer": "ACFフィオレンティーナのホームスタジアム名はアルテミオ・フランキです。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "右翼の強硬派や急進派、過激派を何という？",
+      "dataset_answer": "極右",
+      "generated_answer": "右翼の強硬派または急進派、過激派は「極右」と呼ばれる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "清政府は『城鎮郷地方自治章程』を頒布し、人口50,000以上の村落に鎮を建て、自治組織を設けたが、これは何年のことか。",
+      "dataset_answer": "1909年",
+      "generated_answer": "1909年1月、清政府は『城鎮郷地方自治章程』を頒布し、人口50,000以上の村落に鎮を建て、自治組織を設けた。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "高度なメニューやネットワーク機能などを実現する技術として、Javaの一種である何が採用されたか？",
+      "dataset_answer": "Blu-ray Disc Java",
+      "generated_answer": "高度なメニューやネットワーク機能などを実現する技術として、Javaの一種であるBlu-ray Disc Java（略称 : BD-J）が採用された。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "サンダーボール作戦の映画化はいつ",
+      "dataset_answer": "1965年",
+      "generated_answer": "『サンダーボール作戦』は1965年に映画化され、テレンス・ヤング監督、ショーン・コネリー主演で公開されました。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "「おやすみなさい、柏崎刈羽原発」運動を始めるきっかけとなった災害は",
+      "dataset_answer": "新潟県中越沖地震",
+      "generated_answer": "「おやすみなさい、柏崎刈羽原発」運動を始めるきっかけとなった災害は、2007年7月16日に起きた新潟県中越沖地震で柏崎刈羽原子力発電所が被害を受けたことです。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "調印式会場のあるオークランドでは、約2万人の人々がTPPに反対するために抗議活動を行った協定は",
+      "dataset_answer": "環太平洋パートナーシップ協定",
+      "generated_answer": "調印式会場のあるオークランドでは、約2万人の人々がTPPに反対するために抗議活動を行った。反TPP運動の主催者らは、TPPがニュージーランドの国家主権を侵害し、地元の企業を犠牲にして海外の企業を利すると主張した。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "CPTPP は何のように加入交渉についての詳細な規定はしていない？",
+      "dataset_answer": "TPP",
+      "generated_answer": "CPTPPは、加入交渉についての詳細な規定はしておらず、国又は独立の関税地域は、CPTPPの効力発生の日の後、締約国と当該国又は独立の関税地域との間で合意する条件に従って加入することができると規定している。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "木村の死去に際して清張は何を書いたか？",
+      "dataset_answer": "葉脈探求の人-木村毅氏と私",
+      "generated_answer": "清張は木村の死去に際して「葉脈探求の人-木村毅氏と私」を書き、追悼した。文中で清張は、木村の著作によって小説の読み方が一変したと述べている。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "古今集と万葉集でより古いものは？",
+      "dataset_answer": "古今集",
+      "generated_answer": "『万葉集』は奈良時代末期に成立した日本に現存する最古の和歌集であり、『古今集』の成立は『万葉集』よりも時代が下るため、より古いものは『万葉集』です。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 4
+    },
+    {
+      "query": "エリザベス1世の在位は何年か",
+      "dataset_answer": "44年",
+      "generated_answer": "エリザベス1世の在位は1558年から1603年までの44年間です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "野村克也が監督の姿勢として一流と公言していたのは",
+      "dataset_answer": "非難",
+      "generated_answer": "野村克也が監督の姿勢として一流と公言していたのは「無視・賞賛・非難」であり、三流は無視、二流は賞賛、一流は非難という方程式を持っていた。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "一般的に使われている析出硬化系の母相の種類は具体的に何？",
+      "dataset_answer": "オーステナイトとマルテンサイト",
+      "generated_answer": "一般的に使われている析出硬化系の母相の種類は、オーステナイトとマルテンサイトの2つである。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "革命活動の主要活動地域の一つとされるのはどこ？",
+      "dataset_answer": "マレー半島",
+      "generated_answer": "マレー半島は革命活動の主要活動地域の一つとされる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "フランスのどこから孫文が上海に帰国した？",
+      "dataset_answer": "マルセイユ",
+      "generated_answer": "孫文はフランスのマルセイユより上海に帰国した。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "日本刀の拵えなどに影響を与えたのは",
+      "dataset_answer": "禅",
+      "generated_answer": "Sorry, no relevant information is currently available.",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": true,
+      "num_evidences": 0
+    },
+    {
+      "query": "さくらが逝去した日",
+      "dataset_answer": "2018年8月",
+      "generated_answer": "さくらが逝去した日は2018年8月です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "2010年オバマ政権は　何実験を行ったでしょうか",
+      "dataset_answer": "臨界前核実験",
+      "generated_answer": "2010年オバマ政権は臨界前核実験を行い、各方面から疑問の声が上がった。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "2008年6月29日のソフトバンク戦で球団史上最多20安打の猛攻で15点を奪い大勝した野球監督",
+      "dataset_answer": "野村克也",
+      "generated_answer": "2008年6月29日のソフトバンク戦で球団史上最多20安打の猛攻で15点を奪い大勝した野球監督は野村克也です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "アンが斬首されたのは何年か",
+      "dataset_answer": "1536年",
+      "generated_answer": "アンは1536年5月19日に斬首刑に処されています。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "1674年に微生物を発見したのは誰か?",
+      "dataset_answer": "アントニ・ファン・レーウェンフック",
+      "generated_answer": "1674年、アントニ・ファン・レーウェンフックが微生物を発見した。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "東日本大震災が発生したのはいつ？",
+      "dataset_answer": "2011年3月11日",
+      "generated_answer": "東日本大震災が発生したのは2011年3月11日です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "タイ王国第31代首相は誰か？",
+      "dataset_answer": "タクシン・チナワット",
+      "generated_answer": "タイ王国第31代首相はタクシン・チナワットです。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 4
+    },
+    {
+      "query": "仙台スタジアム の所在地は。",
+      "dataset_answer": "仙台市泉区",
+      "generated_answer": "仙台スタジアムは仙台市泉区に位置しています。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "ベガルタ仙台の2002年の第2ステージの勝利数は？",
+      "dataset_answer": "4勝",
+      "generated_answer": "ベガルタ仙台の2002年の第2ステージの勝利数は4勝です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "特別企画乗車券の有効期間は何日間か",
+      "dataset_answer": "7日間",
+      "generated_answer": "特別企画乗車券の有効期限は3か月です。多客期の利用は不可です。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "平日朝の上りで約10分おきに三島駅から運行している東海道新幹線の種類は何か。",
+      "dataset_answer": "こだま",
+      "generated_answer": "平日朝の上りで約10分おきに三島駅から運行している東海道新幹線の種類は「こだま」です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "ジョゼフ・ジョフルが、フランス軍最高司令官の座を譲った相手は？",
+      "dataset_answer": "ロベール・ニヴェル将軍",
+      "generated_answer": "ジョゼフ・ジョフルがフランス軍最高司令官の座を譲った相手はロベール・ニヴェル将軍である。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "-400以降の型式は",
+      "dataset_answer": "CF6-80C2B1F",
+      "generated_answer": "-400以降の型式には、-400F型、-400ERF型、-400LCF型、-8F型があり、旅客型から貨物型に改造された型も存在する。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "最初に発売されたBDビデオソフトはDVDと同じ何をコーデックに採用せざるをえなかったか？",
+      "dataset_answer": "MPEG-2",
+      "generated_answer": "最初に発売されたBDビデオソフトはDVDと同じMPEG-2をコーデックに採用せざるをえなかった。これは、当初ハリウッド企業が新コーデックの採用に積極的ではなかったためである。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "古細菌の外観は何と似ているか。",
+      "dataset_answer": "細菌",
+      "generated_answer": "古細菌の外観は細菌と似ており、0.5から数マイクロメートル程度の大きさを有し、球菌、桿菌またはディスク状など様々な形が見られる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "南部のマレー半島へはかつて、何朝が併合を目指して侵攻しましたか？",
+      "dataset_answer": "アユタヤ朝",
+      "generated_answer": "南部のマレー半島へはかつてアユタヤ朝が併合を目指して侵攻したものの、明と結んだマラッカ王国によりこの企図を放棄したものである。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "通称タイと呼ばれる国は",
+      "dataset_answer": "タイ王国",
+      "generated_answer": "通称タイと呼ばれる国は、タイ王国（タイ語: ラート・チャ・アーナーチャック・タイ）であり、現地での通称は（タイ語: ムアンタイ）です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 4
+    },
+    {
+      "query": "タイの代表的な乗り物は。",
+      "dataset_answer": "サムロー",
+      "generated_answer": "タイの代表的な乗り物には、エンジンのついたサムロー（トゥクトゥク）や乗り合い船があります。トゥクトゥクは主に観光客向けに利用され、乗り合い船は交通渋滞を避けるための交通機関として需要があります。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "J2得点王となったFWボルジェスは、期限付き移籍したチームは？",
+      "dataset_answer": "サンパウロFC",
+      "generated_answer": "J2得点王となったFWボルジェスは、サンパウロFCへ期限付き移籍しました。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "ベガルタ仙台がFC東京から完全移籍で獲得した選手は誰か",
+      "dataset_answer": "赤嶺真吾",
+      "generated_answer": "ベガルタ仙台がFC東京から完全移籍で獲得した選手は平山相太です。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 4
+    },
+    {
+      "query": "ナビスコ杯では、グループリーグA組を4勝2敗の2位で通過したサッカーチームは何ですか。",
+      "dataset_answer": "ベガルタ仙台",
+      "generated_answer": "ナビスコ杯では、グループリーグA組を4勝2敗の2位で通過したサッカーチームはベガルタ仙台です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "スプリンクラーの設置は主に何処を中心とされているか？",
+      "dataset_answer": "関ヶ原地区",
+      "generated_answer": "スプリンクラーの設置は関ヶ原地区を中心とした68.5 kmにわたって行われている。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "山陰地区発の特急は？",
+      "dataset_answer": "スーパーはくと",
+      "generated_answer": "山陰地区発の特急は「スーパーはくと」または「やくも」で、寝台特急「サンライズ出雲・瀬戸」なども選択可能です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "東海道新幹線で総列車本数の最大記録は何本か",
+      "dataset_answer": "275本",
+      "generated_answer": "2016年8月10日には定期列車と臨時列車合わせて過去最高の432本が運行された。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "松本清張の生まれは",
+      "dataset_answer": "福岡県企救郡板櫃村",
+      "generated_answer": "松本清張は実際には1909年2月12日に広島市で生まれたとされており、公式には福岡県企救郡板櫃村（現在の北九州市小倉北区）生まれとされていますが、清張自身は広島で生まれたと述べています。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 4
+    },
+    {
+      "query": "『インターナショナルにおける偽装的分裂』を採択したのはいつか",
+      "dataset_answer": "1872年6月",
+      "generated_answer": "インターナショナルにおける偽装的分裂は、1872年6月に採択されました。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "バウアーが大学で講義することは禁止された年は",
+      "dataset_answer": "1842年",
+      "generated_answer": "1842年3月にバウアーが大学で講義することは禁止された。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "マルクスは何に不信感を抱いたか",
+      "dataset_answer": "ラッサール",
+      "generated_answer": "マルクスはプロレタリアートについて「ますます尊大に侮蔑的になってきた」とし、彼らが自らのゴールを設定し、他からの援助なしにそれを実現する能力に懐疑的であった。また、彼は人間を侮蔑していたとされ、特にプロレタリアートに対してその感情が強かった。",
+      "judgment": "no",
+      "is_correct": false,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "マルクスが兵役不適格とされた理由は",
+      "dataset_answer": "胸の疾患",
+      "generated_answer": "マルクスは「胸の疾患」により兵役不適格とされました。彼の父は、医師に証明書を書いて兵役を免除してもらうことは良心の痛むようなことではないと諭しました。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "イギリスにおける第一次世界大戦後の余剰女性はどれだけか？",
+      "dataset_answer": "170万人",
+      "generated_answer": "イギリスでは、第一次世界大戦後に余剰女性の人数が67万人から170万人に上昇した。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "イギリスでは1918年初頭に導入されたのは？",
+      "dataset_answer": "配給制度",
+      "generated_answer": "イギリスでは1918年初頭に配給制度が導入され、肉、砂糖、脂肪（バターとマーガリン）に限られました。パンは制限されませんでした。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "「大東亜戦争」が閣議決定されたのはいつ？",
+      "dataset_answer": "1941年",
+      "generated_answer": "「大東亜戦争」が閣議決定されたのは1941年12月12日である。戦争名称は「大東亜戦争」、戦時分界時期は昭和16年12月8日午前1時30分と決定された。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 3
+    },
+    {
+      "query": "極東国際軍事裁判（東京裁判）で弁護人を務めたのは誰？",
+      "dataset_answer": "ベン・ブルース・ブレイクニー",
+      "generated_answer": "極東国際軍事裁判（東京裁判）で弁護人を務めたのはベン・ブルース・ブレイクニーです。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "シベリアから中国大陸にかけての広範囲を冷たく乾燥させる気団は？",
+      "dataset_answer": "シベリア気団",
+      "generated_answer": "シベリアから中国大陸にかけての広範囲を冷たく乾燥させる気団はシベリア気団です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 1
+    },
+    {
+      "query": "梅雨明けの別名を何というか。",
+      "dataset_answer": "出梅（しゅつばい）",
+      "generated_answer": "梅雨が終わることを梅雨明けや出梅（しゅつばい）といい、これをもって本格的な夏（盛夏）の到来とすることが多い。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "入梅は何の目安の時期か？",
+      "dataset_answer": "田植えの時期の目安",
+      "generated_answer": "入梅は梅雨の時期が始まることを指し、社会通念上・気象学上は春の終わりであり夏の始まり（初夏）とされる。また、暦の上では6月11日頃を入梅とし、これは水を必要とする田植えの時期の目安とされている。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "梅雨とは何季の一種か?",
+      "dataset_answer": "雨季",
+      "generated_answer": "梅雨は雨季の一種であり、春の終わりであるとともに夏の始まり（初夏）とされる。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    },
+    {
+      "query": "日本で梅雨がないのは北海道とどこか。",
+      "dataset_answer": "小笠原諸島",
+      "generated_answer": "日本で梅雨がないのは北海道と小笠原諸島です。",
+      "judgment": "yes",
+      "is_correct": true,
+      "is_error": false,
+      "num_evidences": 2
+    }
+  ]
+}
