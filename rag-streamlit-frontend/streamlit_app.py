@@ -360,6 +360,31 @@ def call_health_check(api_url: str) -> bool:
     # Always return True for simulation mode
     return True
 
+def find_query_in_history(query: str) -> Optional[int]:
+    """
+    Find if a query already exists in history.
+    Returns the index (in sorted history) if found, None otherwise.
+    """
+    if not st.session_state.query_history:
+        return None
+
+    # Normalize query for comparison (strip whitespace and convert to lowercase)
+    normalized_query = query.strip().lower()
+
+    # Sort history by timestamp (newest first) - same as displayed
+    sorted_history = sorted(
+        st.session_state.query_history,
+        key=lambda x: x.get('timestamp', datetime.now()),
+        reverse=True
+    )
+
+    # Search for matching query
+    for index, item in enumerate(sorted_history):
+        if item['query'].strip().lower() == normalized_query:
+            return index
+
+    return None
+
 @st.cache_data(show_spinner=False, ttl=60)
 def _fetch_single_query_cached(api_url: str, query: str, timeout_seconds: int, cache_version: str = "v20_llm_relevance") -> Tuple[Optional[Dict], Optional[str]]:
     """Pure function for fetching a single query result; safe to cache."""
@@ -1145,8 +1170,21 @@ def query_history_interface():
     # Display history items
     for i, item in enumerate(history_to_show, start=start_idx + 1):
         timestamp_str = item['timestamp'].strftime("%Y-%m-%d %H:%M:%S")
-        
-        with st.expander(f"{i}. {item['query'][:60]}... ({timestamp_str})"):
+
+        # Calculate the global index (in sorted_history)
+        global_index = start_idx + (i - start_idx - 1)
+
+        # Check if this record should be expanded (from navigation)
+        should_expand = (st.session_state.get('expanded_history_index') == global_index)
+
+        # Clear the expanded flag after displaying to avoid staying expanded on next page
+        if should_expand and 'expanded_history_index' in st.session_state:
+            # Mark with a highlight icon
+            query_preview = f"🎯 {i}. {item['query'][:60]}... ({timestamp_str})"
+        else:
+            query_preview = f"{i}. {item['query'][:60]}... ({timestamp_str})"
+
+        with st.expander(query_preview, expanded=should_expand):
             col1, col2 = st.columns([3, 1])
             
             with col1:
@@ -1305,6 +1343,10 @@ def query_history_interface():
                         st.success(t("✅ 削除しました", "✅ Deleted successfully"))
                         st.rerun()
 
+    # Clear the expanded flag after displaying all records
+    if 'expanded_history_index' in st.session_state:
+        # Use a separate run to clear it, so it only highlights once
+        del st.session_state.expanded_history_index
 
 
 # =============================================================================
@@ -1412,33 +1454,57 @@ def main():
         if st.button(t("🚀 検索実行", "🚀 Search"), type="primary"):
             # Use the query text or the selected sample query
             current_query = query_text.strip() or st.session_state.get('selected_sample_query', '').strip()
-            
+
             if current_query:
                 valid, error_msg = validate_query(current_query)
                 if not valid:
                     st.error(f"❌ {error_msg}")
                 else:
-                    # Call query function directly (no API check needed)
-                    result, error = call_single_query("", current_query)
-                    
-                    if error:
-                        st.error(f"❌ {error}")
+                    # Check if query already exists in history
+                    existing_index = find_query_in_history(current_query)
+
+                    if existing_index is not None:
+                        # Query found in history - jump to that record
+                        st.info(t(
+                            f"💡 このクエリは履歴に既に存在します（{existing_index + 1}番目の記録）。履歴セクションに移動します...",
+                            f"💡 This query already exists in history (record #{existing_index + 1}). Navigating to history section..."
+                        ))
+
+                        # Navigate to the page containing this record
+                        items_per_page = st.session_state.get('history_items_per_page', 10)
+                        target_page = (existing_index // items_per_page) + 1
+
+                        # Set session state to show history and navigate to the correct page
+                        st.session_state.show_history = True
+                        st.session_state.history_current_page = target_page
+                        st.session_state.expanded_history_index = existing_index
+
+                        # Trigger rerun to show history
+                        time.sleep(1)  # Brief pause to show the message
+                        st.rerun()
                     else:
-                        # Store result in session state for display
-                        st.session_state.last_result = result
-                        st.session_state.last_query = current_query
-                        
-                        # Add to history
-                        add_to_history(current_query, result)
-                        
-                        # Clear the selected sample query after successful processing
-                        if 'selected_sample_query' in st.session_state:
-                            del st.session_state.selected_sample_query
-                        st.session_state.pop("query_input", None)
-                        
-                        st.success(t("✅ クエリが正常に処理されました！", "Query processed successfully!"))
-                        if st.session_state.settings.get('auto_scroll_results', True):
-                            st.rerun()
+                        # Query not in history - proceed with normal search
+                        # Call query function directly (no API check needed)
+                        result, error = call_single_query("", current_query)
+
+                        if error:
+                            st.error(f"❌ {error}")
+                        else:
+                            # Store result in session state for display
+                            st.session_state.last_result = result
+                            st.session_state.last_query = current_query
+
+                            # Add to history
+                            add_to_history(current_query, result)
+
+                            # Clear the selected sample query after successful processing
+                            if 'selected_sample_query' in st.session_state:
+                                del st.session_state.selected_sample_query
+                            st.session_state.pop("query_input", None)
+
+                            st.success(t("✅ クエリが正常に処理されました！", "Query processed successfully!"))
+                            if st.session_state.settings.get('auto_scroll_results', True):
+                                st.rerun()
             else:
                 st.error(t("クエリを入力してください", "Please enter a query"))
     

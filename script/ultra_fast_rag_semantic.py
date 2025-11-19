@@ -337,6 +337,24 @@ class SemanticLLMRanker:
         Score: 0.0
         Reason: Completely different topic - question asks about a person's birthplace but text discusses word creation.
 
+        Example 5 (Time-Specific Query - Correct Time Match):
+        Question: ベガルタ仙台の2002年の第2ステージの勝利数は？
+        Reference Text: ベガルタ仙台 [SEP] 2002年は不調であった。J1リーグ戦・第1ステージは序盤に4連敗...続く第2ステージではわずか4勝（1分10敗）で15位に終わった。
+        Score: 0.95
+        Reason: Reference text explicitly mentions "2002年" and "第2ステージ" with the exact answer "4勝". Perfect temporal match.
+
+        Example 6 (Time-Specific Query - Wrong Time Period):
+        Question: ベガルタ仙台の2002年の第2ステージの勝利数は？
+        Reference Text: ベガルタ仙台 [SEP] 2001年のJ1リーグ戦・第1ステージは7勝を記録...第2ステージでは6勝であった。
+        Score: 0.0
+        Reason: Question asks about 2002, but reference text discusses 2001. Wrong time period - must give ZERO score for temporal mismatch.
+
+        **CRITICAL TEMPORAL MATCHING RULES:**
+        1. If the question contains specific time indicators (年/year, 月/month, 日/date, ステージ/stage, 回/round, etc.), check if the reference text mentions THE SAME time period
+        2. If the time periods DO NOT MATCH EXACTLY, give a score of 0.0, even if the entity name matches
+        3. If the time period matches exactly, give high score (0.9+) if it contains the answer
+        4. Examples of time indicators: 2002年, 第2ステージ, 3月, 2020年代, 第10回, 平成時代, etc.
+
         Now evaluate:
         Question: {query}
         Reference Text: {content}
@@ -616,6 +634,32 @@ class PureSemanticRAG:
             print(f"❌ Pure semantic vector store build failed: {e}")
             return False
 
+    def _fallback_tokenizer_with_boost(self, text: str) -> List[str]:
+        """
+        Fallback character-based tokenizer with ordinal number boosting
+        序数詞をブーストする文字ベースのフォールバックトークナイザー
+        """
+        tokens = list(text.replace(' ', ''))
+
+        # Find and boost ordinal patterns using regex
+        # 第X代 pattern
+        for match in re.finditer(r'第\d+代', text):
+            matched_text = match.group()
+            # Add matched pattern multiple times to boost its weight
+            tokens.extend(list(matched_text) * 3)
+
+        # YYYY年 pattern
+        for match in re.finditer(r'\d{4}年', text):
+            matched_text = match.group()
+            tokens.extend(list(matched_text) * 2)
+
+        # X月, X日 patterns
+        for match in re.finditer(r'\d+[月日]', text):
+            matched_text = match.group()
+            tokens.extend(list(matched_text) * 2)
+
+        return tokens
+
     def _initialize_bm25(self):
         """Initialize BM25 retriever from ChromaDB documents"""
         if self.bm25_retriever is not None:
@@ -650,31 +694,48 @@ class PureSemanticRAG:
                 from langchain.retrievers import BM25Retriever
             from langchain.schema import Document as LangChainDoc
 
-            # Japanese tokenizer for BM25
+            # Japanese tokenizer for BM25 with enhanced ordinal number matching
             try:
                 import MeCab
                 mecab = MeCab.Tagger()
 
-                def japanese_tokenizer(text):
-                    """Tokenize Japanese text using MeCab"""
+                def japanese_tokenizer_enhanced(text):
+                    """
+                    Enhanced tokenizer with boosted weight for ordinal numbers and key terms
+                    序数詞と重要語句の重み付けを強化したトークナイザー
+                    """
                     try:
                         node = mecab.parseToNode(text)
                         tokens = []
                         while node:
                             if node.surface:
-                                tokens.append(node.surface)
+                                surface = node.surface
+                                tokens.append(surface)
+
+                                # Boost ordinal numbers (第X代, X年, X月, etc.) by repeating tokens
+                                # 序数詞（第X代、X年、X月など）を重複してBM25スコアを向上
+                                if re.match(r'第\d+代', surface):  # 第31代
+                                    tokens.extend([surface] * 3)  # Repeat 3 times for strong boost
+                                elif re.match(r'\d{4}年', surface):  # 2002年
+                                    tokens.extend([surface] * 2)  # Repeat 2 times
+                                elif re.match(r'\d+月', surface) or re.match(r'\d+日', surface):
+                                    tokens.extend([surface] * 2)
+                                # Also boost compound ordinal patterns
+                                elif '第' in surface and '代' in surface:  # 第...代
+                                    tokens.extend([surface] * 3)
+
                             node = node.next
                         return tokens
                     except:
-                        # Fallback: character-based tokenization
-                        return list(text)
+                        # Fallback: character-based tokenization with ordinal boost
+                        return self._fallback_tokenizer_with_boost(text)
 
-                print("✅ Using MeCab for Japanese tokenization")
-                tokenizer_func = japanese_tokenizer
+                print("✅ Using MeCab with enhanced ordinal number matching")
+                tokenizer_func = japanese_tokenizer_enhanced
             except ImportError:
-                print("⚠️ MeCab not available, using character-based tokenization")
-                # Fallback: simple character-level tokenization for Japanese
-                tokenizer_func = lambda text: list(text.replace(' ', ''))
+                print("⚠️ MeCab not available, using enhanced character-based tokenization")
+                # Fallback: enhanced character-level tokenization for Japanese
+                tokenizer_func = lambda text: self._fallback_tokenizer_with_boost(text)
 
             docs = [LangChainDoc(page_content=doc['text'], metadata=doc['metadata'])
                     for doc in self.all_documents]
