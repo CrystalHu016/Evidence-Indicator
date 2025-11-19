@@ -1306,14 +1306,15 @@ def query_history_interface():
                         st.info(item['evidence_text'])
             
             with col2:
-                # Handle None values for processing_time
+                # Only show metrics if they have valid values
                 if item['processing_time'] is not None:
                     st.metric(t("処理時間", "Time"), t(f"{item['processing_time']:.2f}秒", f"{item['processing_time']:.2f}s"))
-                else:
-                    st.metric(t("処理時間", "Time"), t("N/A", "N/A"))
 
-                st.metric(t("信頼度", "Confidence"), f"{item['confidence']:.2f}" if item['confidence'] is not None else "N/A")
-                st.metric(t("根拠範囲", "Range"), f"{item['start_char']}-{item['end_char']}" if item['start_char'] is not None else "N/A")
+                if item['confidence'] is not None:
+                    st.metric(t("信頼度", "Confidence"), f"{item['confidence']:.2f}")
+
+                if item['start_char'] is not None and item['end_char'] is not None and not (item['start_char'] == 0 and item['end_char'] == 0):
+                    st.metric(t("根拠範囲", "Range"), f"{item['start_char']}-{item['end_char']}")
                 
                 if st.button(t("🔄 再実行", "Re-run"), key=f"rerun_{i}"):
                     # Re-run the query
