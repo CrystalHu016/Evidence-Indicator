@@ -207,8 +207,8 @@ def initialize_session_state():
         if HISTORY_MANAGER_AVAILABLE:
             try:
                 manager = QueryHistoryManager(DB_PATH)
-                # Get recent queries from database
-                recent_queries = manager.get_recent_queries(limit=AppConfig.MAX_HISTORY_ITEMS)
+                # Get recent queries from database - only load v2_full_evidence version (100 records)
+                recent_queries = manager.get_recent_queries(limit=100, version='v2_full_evidence')
 
                 # Load dataset for looking up answers
                 dataset_lookup = {}
@@ -1268,7 +1268,11 @@ def query_history_interface():
                 # Display evidence chunks with highlighting
                 evidences = item.get('evidences', [])
                 if evidences:
-                    valid_evidences = [e for e in evidences if not e.get('is_empty', True)]
+                    # Filter valid evidences: check is_empty field or extracted_evidence content
+                    valid_evidences = [
+                        e for e in evidences
+                        if not e.get('is_empty', False) or e.get('extracted_evidence', '').strip()
+                    ]
                     if valid_evidences:
                         with st.expander(t("📄 完全な根拠チャンク (黄色でハイライト表示)", "📄 Full evidence chunks (highlighted in yellow)")):
                             for idx, evidence in enumerate(valid_evidences, 1):
@@ -1299,6 +1303,36 @@ def query_history_interface():
                                         st.info(chunk_content or extracted_evidence)
                                 else:
                                     st.info(chunk_content or extracted_evidence)
+
+                                # Display metrics for this evidence chunk (from evidence object, not match_metrics)
+                                recall = evidence.get('recall', 0.0)
+                                precision = evidence.get('precision', 0.0)
+                                f1_score = evidence.get('f1_score', 0.0)
+                                exact_match = evidence.get('exact_match', False)
+
+                                if recall > 0 or precision > 0 or f1_score > 0:
+                                    col1, col2, col3, col4 = st.columns(4)
+                                    with col1:
+                                        st.metric(
+                                            label=t("F1スコア", "F1 Score"),
+                                            value=f"{f1_score:.1%}"
+                                        )
+                                    with col2:
+                                        st.metric(
+                                            label=t("精度", "Precision"),
+                                            value=f"{precision:.1%}"
+                                        )
+                                    with col3:
+                                        st.metric(
+                                            label=t("再現率", "Recall"),
+                                            value=f"{recall:.1%}"
+                                        )
+                                    with col4:
+                                        st.metric(
+                                            label=t("完全一致", "Exact Match"),
+                                            value=t("✅", "✅") if exact_match else t("❌", "❌")
+                                        )
+
                                 st.markdown("---")
 
                         # Add extraction prompt expander (only if prompts exist)
