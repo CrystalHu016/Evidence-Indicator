@@ -1344,27 +1344,27 @@ def query_history_interface():
 
                                 st.markdown(f"**Chunk {idx}:**")
 
-                                # Simple highlighting: use context as source and highlight evidence text
+                                # Display chunk_content with highlighted evidence
                                 if chunk_content and extracted_evidence:
-                                    # For V1 data: use context from dataset as the full source text
-                                    context = item.get('context', '')
-
-                                    if context and extracted_evidence in context:
-                                        # Highlight evidence in context
-                                        highlighted_html = context.replace(
+                                    # Highlight evidence in the chunk_content (not context!)
+                                    if extracted_evidence in chunk_content:
+                                        highlighted_html = chunk_content.replace(
                                             extracted_evidence,
                                             f'<mark style="background-color: yellow;">{extracted_evidence}</mark>'
                                         )
                                         st.markdown(f'<div style="padding: 1rem; background-color: #f0f0f0; border-radius: 5px; white-space: pre-wrap;">{highlighted_html}</div>', unsafe_allow_html=True)
-                                    elif context:
-                                        # Evidence not found in context, show both
-                                        st.info(f"**原文 (Context):** {context}")
-                                        st.warning(f"**根拠 (Evidence):** {extracted_evidence}")
                                     else:
-                                        # No context available, fallback to chunk_content
-                                        st.info(chunk_content or extracted_evidence)
+                                        # Evidence not found in chunk, show both separately
+                                        st.info(f"**Chunk:** {chunk_content}")
+                                        st.warning(f"**Extracted Evidence:** {extracted_evidence}")
+                                elif chunk_content:
+                                    # Has chunk but no extracted evidence
+                                    st.info(chunk_content)
+                                elif extracted_evidence:
+                                    # Has evidence but no chunk (shouldn't happen)
+                                    st.info(extracted_evidence)
                                 else:
-                                    st.info(chunk_content or extracted_evidence)
+                                    st.warning("No content available")
 
                                 # Display metrics for this evidence chunk (from evidence object, not match_metrics)
                                 recall = evidence.get('recall', 0.0)
