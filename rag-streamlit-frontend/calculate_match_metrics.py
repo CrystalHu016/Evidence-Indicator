@@ -254,6 +254,72 @@ def longest_common_subsequence_length(s1: str, s2: str) -> int:
     return dp[m][n]
 
 
+def evaluate_evidence_answerability(query: str, extracted_evidence: str) -> float:
+    """
+    Use LLM to evaluate if the extracted evidence can answer the original question
+
+    Args:
+        query: The original question
+        extracted_evidence: Evidence text extracted from chunks
+
+    Returns:
+        float: Answerability score from 0.0 to 1.0 (0-100%)
+    """
+    if not query or not extracted_evidence:
+        return 0.0
+
+    try:
+        import google.generativeai as genai
+
+        # Get API key from environment
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("⚠️ GEMINI_API_KEY not found in environment")
+            return 0.0
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+
+        # Construct prompt for answerability evaluation
+        prompt = f"""あなたは質問応答システムの評価者です。抽出された根拠情報が質問に答えるのに十分な情報を含んでいるかを評価してください。
+
+質問：
+{query}
+
+抽出された根拠情報：
+{extracted_evidence}
+
+評価基準：
+- 100点: 根拠情報が質問に完全に答えるのに十分な情報を含んでいる
+- 80-99点: 根拠情報が質問に答えるために必要な情報のほとんどを含んでいる
+- 60-79点: 根拠情報が質問に部分的に答えることができるが、一部情報が不足している
+- 40-59点: 根拠情報が質問に関連しているが、答えるには不十分
+- 20-39点: 根拠情報が質問とわずかに関連しているが、ほとんど答えになっていない
+- 0-19点: 根拠情報が質問と全く関係ない、または全く答えになっていない
+
+**0-100の整数のみを返してください。説明は不要です。**
+
+スコア:"""
+
+        # Call Gemini API
+        response = model.generate_content(prompt)
+        score_text = response.text.strip()
+
+        # Extract numeric score
+        match = re.search(r'\d+', score_text)
+        if match:
+            score = int(match.group())
+            # Normalize to 0.0-1.0 range
+            return min(max(score / 100.0, 0.0), 1.0)
+        else:
+            print(f"⚠️ Could not parse answerability score from response: {score_text}")
+            return 0.0
+
+    except Exception as e:
+        print(f"⚠️ Error calculating answerability score: {e}")
+        return 0.0
+
+
 def calculate_substring_match(extracted_evidence: str, dataset_answer: str) -> dict:
     """
     Alternative: Calculate substring match (simpler, faster)

@@ -1373,7 +1373,7 @@ def query_history_interface():
                                 exact_match = evidence.get('exact_match', False)
 
                                 if recall > 0 or precision > 0 or f1_score > 0:
-                                    col1, col2, col3, col4 = st.columns(4)
+                                    col1, col2, col3, col4, col5 = st.columns(5)
                                     with col1:
                                         st.metric(
                                             label=t("総合Score", "Overall Score"),
@@ -1393,6 +1393,20 @@ def query_history_interface():
                                             help=t("データセット回答のうち見つけた割合", "Percentage of dataset answer found")
                                         )
                                     with col4:
+                                        answerability_score = evidence.get('answerability_score', None)
+                                        if answerability_score is not None:
+                                            st.metric(
+                                                label=t("LLM評価", "LLM Score"),
+                                                value=f"{answerability_score:.1%}",
+                                                help=t("LLMが判断した証拠の回答可能性", "LLM-judged answerability of evidence")
+                                            )
+                                        else:
+                                            st.metric(
+                                                label=t("LLM評価", "LLM Score"),
+                                                value="N/A",
+                                                help=t("LLM評価スコア未計算", "LLM score not calculated")
+                                            )
+                                    with col5:
                                         st.metric(
                                             label=t("完全一致", "Exact Match"),
                                             value=t("✅", "✅") if exact_match else t("❌", "❌"),
