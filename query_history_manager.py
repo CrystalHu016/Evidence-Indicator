@@ -245,12 +245,12 @@ class QueryHistoryManager:
 
         print(f"📊 Dataset comparison saved for query_id={query_id}")
 
-    def get_recent_queries(self, limit: int = 10, version: str = 'v2') -> List[Dict[str, Any]]:
+    def get_recent_queries(self, limit: int = 10, version: str = 'v1_v2_hybrid') -> List[Dict[str, Any]]:
         """Get recent queries
 
         Args:
             limit: Number of recent queries to retrieve
-            version: Version to filter by (v1, v2, v3). Default is v2 (best version)
+            version: Version to filter by (v1, v2, v3, v1_v2_hybrid, v2_requery). Default is v1_v2_hybrid (has evidence chunks)
 
         Returns:
             List of query dictionaries
