@@ -587,7 +587,30 @@ def display_results():
         st.info(dataset_answer)
 
         # Display match metrics if available
+        # For v2_full_evidence: calculate best metrics from all evidences
         match_metrics = result.get('match_metrics', {})
+        result_evidences = result.get('evidences', [])
+
+        # If we have evidences with per-chunk metrics, use the best one
+        if result_evidences:
+            best_f1 = 0.0
+            best_metrics = None
+
+            for ev in result_evidences:
+                ev_f1 = ev.get('f1_score', 0.0)
+                if ev_f1 > best_f1:
+                    best_f1 = ev_f1
+                    best_metrics = {
+                        'match_rate': ev.get('f1_score', 0.0),
+                        'precision': ev.get('precision', 0.0),
+                        'recall': ev.get('recall', 0.0),
+                        'exact_match': ev.get('exact_match', False)
+                    }
+
+            # Use best metrics if found, otherwise fallback to match_metrics
+            if best_metrics and best_metrics['match_rate'] > 0:
+                match_metrics = best_metrics
+
         if match_metrics:
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -1083,19 +1106,34 @@ def export_history():
         mime="text/csv"
     )
 
+def get_best_f1_score(item):
+    """Get the best F1 score from item's evidences"""
+    evidences = item.get('evidences', [])
+    if not evidences:
+        return 0.0
+
+    # Find maximum F1 score across all evidences
+    best_f1 = 0.0
+    for ev in evidences:
+        f1 = ev.get('f1_score', 0.0)
+        if f1 > best_f1:
+            best_f1 = f1
+
+    return best_f1
+
 def query_history_interface():
     """Interface for viewing and managing query history"""
     st.markdown("---")
     st.header(t("📚 クエリ履歴", "Query history"))
-    
+
     if not st.session_state.query_history:
         st.info(t("まだ履歴がありません。", "No history yet."))
         return
-    
-    # Sort history by timestamp (newest first)
+
+    # Sort history by best F1 score (highest first)
     sorted_history = sorted(
         st.session_state.query_history,
-        key=lambda x: x.get('timestamp', datetime.now()),
+        key=lambda x: get_best_f1_score(x),
         reverse=True
     )
 
@@ -1219,7 +1257,30 @@ def query_history_interface():
                     st.info(item['dataset_answer'])
 
                     # Display match metrics if available
+                    # For v2_full_evidence: calculate best metrics from all evidences
                     match_metrics = item.get('match_metrics', {})
+                    item_evidences = item.get('evidences', [])
+
+                    # If we have evidences with per-chunk metrics, use the best one
+                    if item_evidences:
+                        best_f1 = 0.0
+                        best_metrics = None
+
+                        for ev in item_evidences:
+                            ev_f1 = ev.get('f1_score', 0.0)
+                            if ev_f1 > best_f1:
+                                best_f1 = ev_f1
+                                best_metrics = {
+                                    'match_rate': ev.get('f1_score', 0.0),
+                                    'precision': ev.get('precision', 0.0),
+                                    'recall': ev.get('recall', 0.0),
+                                    'exact_match': ev.get('exact_match', False)
+                                }
+
+                        # Use best metrics if found, otherwise fallback to match_metrics
+                        if best_metrics and best_metrics['match_rate'] > 0:
+                            match_metrics = best_metrics
+
                     if match_metrics:
                         col1, col2, col3, col4 = st.columns(4)
                         with col1:
