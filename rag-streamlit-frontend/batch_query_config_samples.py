@@ -15,7 +15,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, current_dir)  # Insert current_dir first to prioritize local config.py
 sys.path.insert(0, parent_dir)
 
-from query_history_manager import QueryHistoryManager
+from database.query_history_manager import QueryHistoryManager
 from backend_integration import call_backend_query
 
 # Import from local config.py in rag-streamlit-frontend directory

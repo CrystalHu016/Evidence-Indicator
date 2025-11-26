@@ -25,7 +25,7 @@ spec.loader.exec_module(frontend_config)
 SAMPLE_QUERIES_BY_CATEGORY = frontend_config.SAMPLE_QUERIES_BY_CATEGORY
 
 # Import from parent directory
-from query_history_manager import QueryHistoryManager
+from database.query_history_manager import QueryHistoryManager
 from backend_integration import call_backend_query
 
 print("=" * 70)

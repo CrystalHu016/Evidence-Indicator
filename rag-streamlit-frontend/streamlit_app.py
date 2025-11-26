@@ -39,7 +39,7 @@ try:
 
     # Import QueryHistoryManager for persistent storage
     sys.path.insert(0, parent_dir)
-    from query_history_manager import QueryHistoryManager
+    from database.query_history_manager import QueryHistoryManager
     DB_PATH = os.path.join(parent_dir, 'query_history.db')
     HISTORY_MANAGER_AVAILABLE = True
     print(f"✅ QueryHistoryManager imported, DB path: {DB_PATH}")

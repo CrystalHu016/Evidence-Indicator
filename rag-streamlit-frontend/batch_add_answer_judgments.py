@@ -15,7 +15,7 @@ sys.path.insert(0, parent_dir)
 
 load_dotenv()
 
-from query_history_manager import QueryHistoryManager
+from database.query_history_manager import QueryHistoryManager
 from calculate_match_metrics import judge_answer_relevance
 import sqlite3
 import time
