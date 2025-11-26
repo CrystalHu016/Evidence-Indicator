@@ -264,8 +264,9 @@ def initialize_session_state():
                             history_item['evidences'] = deserialized_evidences
                             # Extract highlighted evidences
                             for ev in deserialized_evidences:
-                                if not ev.get('is_empty', True) and ev.get('extracted_evidence'):
-                                    history_item['highlighted_evidences'].append(ev.get('extracted_evidence'))
+                                extracted = ev.get('extracted_evidence', '').strip()
+                                if extracted and (not ev.get('is_empty', False)):
+                                    history_item['highlighted_evidences'].append(extracted)
                         except Exception as e:
                             print(f"⚠️ Could not deserialize evidences JSON for query_id={record['id']}: {e}")
 
@@ -1314,23 +1315,27 @@ def query_history_interface():
                                     col1, col2, col3, col4 = st.columns(4)
                                     with col1:
                                         st.metric(
-                                            label=t("F1スコア", "F1 Score"),
-                                            value=f"{f1_score:.1%}"
+                                            label=t("総合Score", "Overall Score"),
+                                            value=f"{f1_score:.1%}",
+                                            help=t("精度と再現率の調和平均", "Harmonic mean of precision and recall")
                                         )
                                     with col2:
                                         st.metric(
                                             label=t("精度", "Precision"),
-                                            value=f"{precision:.1%}"
+                                            value=f"{precision:.1%}",
+                                            help=t("抽出した根拠のうち正しい割合", "Percentage of extracted evidence that is correct")
                                         )
                                     with col3:
                                         st.metric(
                                             label=t("再現率", "Recall"),
-                                            value=f"{recall:.1%}"
+                                            value=f"{recall:.1%}",
+                                            help=t("データセット回答のうち見つけた割合", "Percentage of dataset answer found")
                                         )
                                     with col4:
                                         st.metric(
                                             label=t("完全一致", "Exact Match"),
-                                            value=t("✅", "✅") if exact_match else t("❌", "❌")
+                                            value=t("✅", "✅") if exact_match else t("❌", "❌"),
+                                            help=t("100%一致するか", "Whether it's 100% match")
                                         )
 
                                 st.markdown("---")
